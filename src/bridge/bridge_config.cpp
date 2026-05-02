@@ -34,6 +34,8 @@ BridgeConfig::LoadResult BridgeConfig::load(const std::string& path, BridgeConfi
             return {false, "invalid sip_destination (alphanumeric/*/#+, max 32 chars): " + dest};
         }
         out.sip_destination = dest;
+    } else {
+        out.sip_destination.clear();
     }
 
     if (bridge.has("sip_dial_timeout_sec") && !bridge["sip_dial_timeout_sec"].empty()) {

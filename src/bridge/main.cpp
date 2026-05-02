@@ -506,7 +506,8 @@ int main(int argc, char* argv[]) {
 
     LOG_INFO("config loaded: SIP %s@%s, bridge dest=%s, timeout=%us",
              sip_config.username.c_str(), sip_config.server.c_str(),
-             bridge_config.sip_destination.c_str(), bridge_config.sip_dial_timeout_sec);
+             bridge_config.sip_destination.empty() ? "(PBX routing)" : bridge_config.sip_destination.c_str(),
+             bridge_config.sip_dial_timeout_sec);
 
     if (std::system("systemctl is-active --quiet ModemManager 2>/dev/null") == 0) {
         LOG_WARN("ModemManager is running and may interfere with serial access");
@@ -605,12 +606,14 @@ int main(int argc, char* argv[]) {
         return 5;
     }
 
-    std::string sip_dest_uri = "sip:" + bridge_config.sip_destination
-                               + "@" + sip_config.server
-                               + ":" + std::to_string(sip_config.port);
+    std::string sip_server_suffix = "@" + sip_config.server
+                                    + ":" + std::to_string(sip_config.port);
 
     LOG_INFO("ready, GSM calls will bridge to SIP %s (timeout=%us)",
-             sip_dest_uri.c_str(), bridge_config.sip_dial_timeout_sec);
+             bridge_config.sip_destination.empty()
+                 ? "(PBX routing via caller DID)"
+                 : ("sip:" + bridge_config.sip_destination + sip_server_suffix).c_str(),
+             bridge_config.sip_dial_timeout_sec);
 
     static constexpr int CLIP_WAIT_MS = 300;
 
@@ -656,6 +659,22 @@ int main(int argc, char* argv[]) {
             }
 
             if (at.answer_call()) {
+                std::string sip_user = bridge_config.sip_destination;
+                if (sip_user.empty()) {
+                    sip_user = caller;
+                    if (!sip_user.empty() && sip_user[0] == '+') {
+                        sip_user.erase(0, 1);
+                    }
+                }
+
+                if (sip_user.empty()) {
+                    LOG_WARN("no SIP destination and no caller ID, cannot route call");
+                    at.hangup();
+                    continue;
+                }
+
+                std::string sip_dest_uri = "sip:" + sip_user + sip_server_suffix;
+
                 LOG_INFO("GSM call answered, bridging to %s (caller: %s)",
                          sip_dest_uri.c_str(),
                          caller.empty() ? "unknown" : caller.c_str());

@@ -4,7 +4,7 @@
 #include <string>
 
 struct BridgeConfig {
-    std::string sip_destination = "599";
+    std::string sip_destination;
     uint16_t sip_dial_timeout_sec = 30;
 
     struct LoadResult {

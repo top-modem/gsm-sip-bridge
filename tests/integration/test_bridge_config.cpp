@@ -30,7 +30,7 @@ TEST(BridgeConfig, valid_full_config) {
     std::remove(path.c_str());
 }
 
-TEST(BridgeConfig, missing_bridge_section_uses_defaults) {
+TEST(BridgeConfig, missing_bridge_section_leaves_destination_empty) {
     // Arrange
     auto path = create_temp_file("[sip]\nserver=pbx\nusername=u\npassword=p\n");
 
@@ -40,12 +40,12 @@ TEST(BridgeConfig, missing_bridge_section_uses_defaults) {
 
     // Assert
     EXPECT_TRUE(result.ok);
-    EXPECT_EQ(config.sip_destination, "599");
+    EXPECT_TRUE(config.sip_destination.empty());
     EXPECT_EQ(config.sip_dial_timeout_sec, 30);
     std::remove(path.c_str());
 }
 
-TEST(BridgeConfig, empty_destination_uses_default) {
+TEST(BridgeConfig, empty_destination_enables_pbx_routing) {
     // Arrange
     auto path = create_temp_file("[bridge]\nsip_destination = \n");
 
@@ -55,7 +55,22 @@ TEST(BridgeConfig, empty_destination_uses_default) {
 
     // Assert
     EXPECT_TRUE(result.ok);
-    EXPECT_EQ(config.sip_destination, "599");
+    EXPECT_TRUE(config.sip_destination.empty());
+    std::remove(path.c_str());
+}
+
+TEST(BridgeConfig, omitted_destination_enables_pbx_routing) {
+    // Arrange
+    auto path = create_temp_file("[bridge]\nsip_dial_timeout_sec = 15\n");
+
+    // Act
+    BridgeConfig config;
+    auto result = BridgeConfig::load(path, config);
+
+    // Assert
+    EXPECT_TRUE(result.ok);
+    EXPECT_TRUE(config.sip_destination.empty());
+    EXPECT_EQ(config.sip_dial_timeout_sec, 15);
     std::remove(path.c_str());
 }
 
