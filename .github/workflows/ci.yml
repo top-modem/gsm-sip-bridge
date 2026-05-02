@@ -6,18 +6,48 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  PJSIP_VERSION: "2.16"
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake pkg-config \
-            libasound2-dev libpjproject-dev
+            libasound2-dev libssl-dev wget
+
+      - name: Cache PJSIP build
+        id: pjsip-cache
+        uses: actions/cache@v4
+        with:
+          path: /usr/local
+          key: pjsip-${{ env.PJSIP_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Build and install PJSIP
+        if: steps.pjsip-cache.outputs.cache-hit != 'true'
+        run: |
+          wget -q https://github.com/pjsip/pjproject/archive/refs/tags/${PJSIP_VERSION}.tar.gz
+          tar xzf ${PJSIP_VERSION}.tar.gz
+          cd pjproject-${PJSIP_VERSION}
+          ./configure --prefix=/usr/local \
+            --enable-shared \
+            --disable-video \
+            --disable-v4l2 \
+            --with-external-pa=no
+          make -j$(nproc) dep
+          make -j$(nproc)
+          sudo make install
+          sudo ldconfig
+
+      - name: Refresh linker cache
+        if: steps.pjsip-cache.outputs.cache-hit == 'true'
+        run: sudo ldconfig
 
       - name: Build
         run: make build
