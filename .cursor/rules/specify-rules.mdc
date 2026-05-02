@@ -1,0 +1,35 @@
+---
+description: Project Development Guidelines
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# audio-echo Development Guidelines
+
+Auto-generated from all feature plans. Last updated: 2026-05-02
+
+## Active Technologies
+
+- C++17 (GCC 9+) + libasound2 (ALSA), libudev (USB discovery) (001-gsm-audio-echo)
+
+## Project Structure
+
+```text
+src/
+tests/
+```
+
+## Commands
+
+# Add commands for C++17 (GCC 9+)
+
+## Code Style
+
+C++17 (GCC 9+): Follow standard conventions
+
+## Recent Changes
+
+- 001-gsm-audio-echo: Added C++17 (GCC 9+) + libasound2 (ALSA), libudev (USB discovery)
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->

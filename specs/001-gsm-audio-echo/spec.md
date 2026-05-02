@@ -5,6 +5,12 @@
 **Status**: Draft
 **Input**: User description: "A GSM module (Quectel EC20) connected over USB with a SIM module. When an incoming call is received, attend the call and echo the incoming audio back to the caller. Audio devices from the module are available as soundcard at the OS level. Use maximum audio quality parameters."
 
+## Clarifications
+
+### Session 2026-05-02
+
+- Q: How should the system discover the correct serial port and ALSA audio device for the EC20 module? → A: Auto-detect by USB vendor/product ID (Quectel EC20: 2c7c:0125), with optional CLI override for both serial port and audio device.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Auto-Answer and Echo Audio (Priority: P1)
@@ -127,8 +133,8 @@ file descriptors, audio device handles).
   period? The system MUST continue the call without timeout (the
   remote party controls call duration).
 - What happens if the EC20 module is not detected at startup? The
-  system MUST report the missing device and exit with a clear error
-  message indicating which device was expected.
+  system MUST report that no device matching USB ID 2c7c:0125 was
+  found and exit with a clear error message.
 
 ## Requirements *(mandatory)*
 
@@ -157,13 +163,18 @@ file descriptors, audio device handles).
   interrupt signal (e.g., Ctrl+C).
 - **FR-009**: System MUST log call events (ring, answer, hangup,
   errors) to standard output with timestamps.
-- **FR-010**: System MUST exit with a nonzero status code and a
-  descriptive error message if the GSM module or its audio devices
-  are not detected at startup.
+- **FR-010**: System MUST auto-detect the EC20 module's serial port
+  and ALSA audio device by scanning for the known USB vendor/product
+  ID (2c7c:0125). If no matching device is found, exit with a
+  nonzero status code and a descriptive error message.
+- **FR-011**: System MUST accept optional CLI arguments to override
+  the auto-detected serial port and audio device paths. When
+  overrides are provided, skip auto-detection for those devices.
 
 ### Key Entities
 
-- **GSM Module**: The Quectel EC20 hardware connected via USB.
+- **GSM Module**: The Quectel EC20 hardware connected via USB
+  (vendor ID 2c7c, product ID 0125). Auto-discovered by USB ID.
   Exposes a call signaling interface (for ring/answer/hangup) and
   audio devices (capture and playback) as OS-level soundcards.
 - **Call Session**: Represents an active voice call. Has a lifecycle:
@@ -195,10 +206,10 @@ file descriptors, audio device handles).
 - The host operating system is Linux with ALSA support. The EC20
   module's USB audio interface is enumerated as a standard ALSA
   soundcard automatically by the kernel.
-- The Quectel EC20 module is connected via USB and powered. Its
-  serial/AT command interface and audio interface are both available
-  at the OS level (typically as /dev/ttyUSBx for AT commands and as
-  an ALSA hw:X,Y device for audio).
+- The Quectel EC20 module is connected via USB and powered. The
+  system auto-detects its serial port and ALSA audio device by USB
+  vendor/product ID (2c7c:0125). CLI overrides are available if
+  auto-detection is insufficient.
 - A SIM card with an active voice plan is inserted into the module.
   The SIM does not require a PIN at startup (PIN is disabled or
   pre-entered).
