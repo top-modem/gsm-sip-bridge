@@ -317,45 +317,6 @@ Two standalone echo tools are included for isolating GSM or SIP issues independe
 | `make run-gsm-echo` | Echo GSM audio back to caller (no SIP) |
 | `make run-sip-echo` | Echo SIP audio back to caller (no GSM) |
 
-## Architecture
-
-```text
-src/
-├── logger.h              # Shared timestamped stdout logging
-├── ring_buffer.h         # Lock-free SPSC ring buffer (header-only)
-├── device_discovery.*    # USB sysfs auto-detection (VID:PID 2c7c:0125), multi-device
-├── serial_port.*         # POSIX termios RAII wrapper
-├── at_commander.*        # AT command send/receive, URC parsing
-├── audio_loop.*          # ALSA capture->playback loopback (used by GSM echo)
-├── main.cpp              # GSM echo entry point (debug utility)
-├── sip/
-│   ├── main.cpp          # SIP echo entry point (debug utility)
-│   ├── sip_config.*      # INI config parser and validation
-│   ├── echo_account.*    # pj::Account for SIP echo
-│   └── echo_call.*       # pj::Call for SIP echo loopback
-└── bridge/
-    ├── main.cpp          # Entry point: config, PJSIP init, CardPool orchestration
-    ├── card_instance.*   # Per-module encapsulation (serial, AT, thread, call handling)
-    ├── card_pool.*       # Multi-card lifecycle (discover, init, retry, shutdown)
-    ├── bridge_config.*   # [bridge] section INI parser
-    ├── bridge_account.*  # pj::Account for concurrent outbound SIP calls
-    ├── bridge_call.*     # pj::Call for outbound SIP leg
-    ├── alsa_media_port.* # AudioMediaPort adapter (ALSA <-> PJSIP)
-    ├── beep_generator.*  # 400Hz tone pattern generator
-    └── metrics.*         # Prometheus metrics exposition (prometheus-cpp)
-
-vendor/
-└── mini/ini.h            # mINI header-only INI parser (MIT)
-
-docker/
-├── prometheus.yml        # Prometheus scrape configuration
-└── grafana/
-    ├── provisioning/     # Auto-configured datasource and dashboard provider
-    └── dashboards/       # Pre-built Grafana dashboard JSON
-
-tests/integration/        # 95 integration tests
-```
-
 ## ModemManager Interference
 
 ModemManager probes `ttyUSB*` ports for modems, which corrupts AT sessions. The program warns at startup if ModemManager is active. To fix permanently, install the included udev rule:

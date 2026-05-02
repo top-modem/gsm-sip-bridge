@@ -30,7 +30,6 @@ RUN wget -q https://github.com/pjsip/pjproject/archive/refs/tags/${PJSIP_VERSION
 WORKDIR /src
 COPY CMakeLists.txt Makefile ./
 COPY src/ src/
-COPY vendor/ vendor/
 COPY tests/ tests/
 
 RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -S . \

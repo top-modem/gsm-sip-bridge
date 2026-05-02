@@ -9,6 +9,14 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(ALSA REQUIRED alsa)
 
 include(FetchContent)
+
+FetchContent_Declare(
+    mini
+    GIT_REPOSITORY https://github.com/metayeti/mINI.git
+    GIT_TAG 0.9.17
+)
+FetchContent_MakeAvailable(mini)
+
 FetchContent_Declare(
     prometheus-cpp
     GIT_REPOSITORY https://github.com/jupp0r/prometheus-cpp.git
@@ -54,7 +62,7 @@ add_executable(sip-echo
 
 target_include_directories(sip-echo PRIVATE
     src
-    vendor
+    ${mini_SOURCE_DIR}/src
     ${PJSIP_INCLUDE_DIRS}
 )
 
@@ -91,7 +99,7 @@ add_executable(gsm-sip-bridge
 
 target_include_directories(gsm-sip-bridge PRIVATE
     src
-    vendor
+    ${mini_SOURCE_DIR}/src
     ${ALSA_INCLUDE_DIRS}
     ${PJSIP_INCLUDE_DIRS}
 )
@@ -168,7 +176,7 @@ if(GTest_FOUND)
 
     target_include_directories(sip-echo-tests PRIVATE
         src
-        vendor
+        ${mini_SOURCE_DIR}/src
         tests/integration
         ${PJSIP_INCLUDE_DIRS}
     )
@@ -211,7 +219,7 @@ if(GTest_FOUND)
 
     target_include_directories(bridge-tests PRIVATE
         src
-        vendor
+        ${mini_SOURCE_DIR}/src
         tests/integration
         ${PJSIP_INCLUDE_DIRS}
         ${ALSA_INCLUDE_DIRS}
