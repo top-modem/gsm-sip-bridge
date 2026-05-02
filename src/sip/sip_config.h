@@ -10,6 +10,7 @@ struct SipConfig {
     std::string password;
     std::string display_name;
     std::string transport = "udp";
+    uint16_t local_port = 5060;
 
     struct LoadResult {
         bool ok = false;

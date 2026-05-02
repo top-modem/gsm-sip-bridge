@@ -60,6 +60,19 @@ SipConfig::LoadResult SipConfig::load(const std::string& path, SipConfig& out) {
         out.transport = t;
     }
 
+    if (sip.has("local_port") && !sip["local_port"].empty()) {
+        int lp = 0;
+        try {
+            lp = std::stoi(sip["local_port"]);
+        } catch (...) {
+            return {false, "invalid local_port value: " + sip["local_port"]};
+        }
+        if (lp < MIN_PORT || lp > MAX_PORT) {
+            return {false, "local_port out of range (1-65535): " + sip["local_port"]};
+        }
+        out.local_port = static_cast<uint16_t>(lp);
+    }
+
     return {true, ""};
 }
 

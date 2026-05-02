@@ -93,10 +93,11 @@ int main(int argc, char* argv[]) {
             ep_cfg.logConfig.level = 4;
             ep_cfg.logConfig.consoleLevel = 4;
         }
+        ep_cfg.uaConfig.userAgent = "sip-echo/" + std::string(VERSION);
         ep.libInit(ep_cfg);
 
         pj::TransportConfig tp_cfg;
-        tp_cfg.port = 0;
+        tp_cfg.port = config.local_port;
 
         pjsip_transport_type_e tp_type = PJSIP_TRANSPORT_UDP;
         if (config.transport == "tcp") tp_type = PJSIP_TRANSPORT_TCP;
@@ -125,9 +126,17 @@ int main(int argc, char* argv[]) {
         acc_cfg.regConfig.timeoutSec = 300;
         acc_cfg.regConfig.retryIntervalSec = 30;
 
+        // NAT handling: allow PJSIP to rewrite the Contact header
+        // based on the Via received/rport from the server response
+        acc_cfg.natConfig.contactRewriteUse = 1;
+        acc_cfg.natConfig.contactRewriteMethod = 2;
+        acc_cfg.natConfig.sdpNatRewriteUse = 1;
+        acc_cfg.natConfig.sipOutboundUse = 0;
+
         account.create(acc_cfg);
-        LOG_INFO("registering as %s@%s:%u",
-                 config.username.c_str(), config.server.c_str(), config.port);
+        LOG_INFO("registering as %s@%s:%u (local port %u)",
+                 config.username.c_str(), config.server.c_str(),
+                 config.port, config.local_port);
 
     } catch (pj::Error& err) {
         LOG_ERROR("account creation failed: %s", err.info().c_str());

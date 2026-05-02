@@ -16,3 +16,8 @@ display_name = Echo Server
 
 ; Transport protocol: udp, tcp, or tls (optional, default: udp)
 transport = udp
+
+; Local SIP port (optional, default: 5060)
+; Using a fixed port prevents stale contact registrations on the PBX
+; when the server restarts
+local_port = 5060
