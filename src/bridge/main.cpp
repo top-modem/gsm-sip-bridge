@@ -24,7 +24,7 @@
 #include <thread>
 #include <vector>
 
-static constexpr const char* VERSION = "0.1.0";
+static constexpr const char* VERSION = "1.0.0";
 static constexpr const char* DEFAULT_CONFIG_PATH = "config.ini";
 
 static constexpr unsigned int SAMPLE_RATE = 8000;
