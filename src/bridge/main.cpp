@@ -24,7 +24,7 @@
 #include <thread>
 #include <vector>
 
-static constexpr const char* VERSION = "1.0.0";
+static constexpr const char* VERSION = "1.1.0";
 static constexpr const char* DEFAULT_CONFIG_PATH = "config.ini";
 
 static constexpr unsigned int SAMPLE_RATE = 8000;
@@ -211,11 +211,20 @@ static void alsa_capture_thread(snd_pcm_t* capture,
                                 std::atomic<bool>& bridged) {
     std::vector<int16_t> buf(PERIOD_FRAMES);
     bool was_bridged = false;
+    unsigned long total_frames = 0;
+    unsigned long bridged_frames = 0;
+    unsigned int xrun_count = 0;
+    auto last_stats = std::chrono::steady_clock::now();
+
     while (running.load(std::memory_order_relaxed)) {
         snd_pcm_sframes_t frames = snd_pcm_readi(capture, buf.data(), PERIOD_FRAMES);
         if (frames < 0) {
             if (frames == -EPIPE) {
+                ++xrun_count;
+                LOG_WARN("ALSA capture overrun #%u (bridged=%s, total_frames=%lu)",
+                         xrun_count, was_bridged ? "yes" : "no", total_frames);
                 snd_pcm_prepare(capture);
+                snd_pcm_start(capture);
                 continue;
             }
             if (frames == -EINTR) continue;
@@ -223,14 +232,27 @@ static void alsa_capture_thread(snd_pcm_t* capture,
             break;
         }
 
+        total_frames += static_cast<unsigned long>(frames);
+
         bool now_bridged = bridged.load(std::memory_order_acquire);
         if (now_bridged && !was_bridged) {
             ring.reset();
             was_bridged = true;
+            LOG_INFO("ALSA capture: bridge active, forwarding audio (pre-bridge frames=%lu, xruns=%u)",
+                     total_frames, xrun_count);
         }
 
         if (was_bridged) {
             ring.try_write(buf.data(), static_cast<size_t>(frames));
+            bridged_frames += static_cast<unsigned long>(frames);
+
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_stats).count();
+            if (elapsed >= 5) {
+                LOG_INFO("ALSA capture stats: bridged_frames=%lu, ring_avail=%zu, xruns=%u",
+                         bridged_frames, ring.available_read(), xrun_count);
+                last_stats = now;
+            }
         }
     }
 }
@@ -372,6 +394,25 @@ static void handle_bridged_call(AtCommander& at,
 
     auto dial_start = std::chrono::steady_clock::now();
     bool bridge_connected = false;
+    unsigned int last_media_version = 0;
+
+    auto connect_media = [&]() -> bool {
+        try {
+            pj::CallInfo ci = sip_call->getInfo();
+            for (unsigned i = 0; i < ci.media.size(); ++i) {
+                if (ci.media[i].type != PJMEDIA_TYPE_AUDIO) continue;
+                if (ci.media[i].status != PJSUA_CALL_MEDIA_ACTIVE) continue;
+
+                pj::AudioMedia aud = sip_call->getAudioMedia(i);
+                media_port.startTransmit(aud);
+                aud.startTransmit(media_port);
+                return true;
+            }
+        } catch (pj::Error& err) {
+            LOG_ERROR("media connect failed: %s", err.info().c_str());
+        }
+        return false;
+    };
 
     while (g_running.load(std::memory_order_relaxed)) {
         auto urc = at.poll_urc();
@@ -407,21 +448,11 @@ static void handle_bridged_call(AtCommander& at,
                 beep_active.store(false, std::memory_order_release);
                 audio_bridged.store(true, std::memory_order_release);
 
-                try {
-                    pj::CallInfo ci = sip_call->getInfo();
-                    for (unsigned i = 0; i < ci.media.size(); ++i) {
-                        if (ci.media[i].type != PJMEDIA_TYPE_AUDIO) continue;
-                        if (ci.media[i].status != PJSUA_CALL_MEDIA_ACTIVE) continue;
-
-                        pj::AudioMedia aud = sip_call->getAudioMedia(i);
-                        media_port.startTransmit(aud);
-                        aud.startTransmit(media_port);
-                        bridge_connected = true;
-                        LOG_INFO("audio bridge connected (GSM <-> SIP)");
-                        break;
-                    }
-                } catch (pj::Error& err) {
-                    LOG_ERROR("media connect failed: %s", err.info().c_str());
+                if (connect_media()) {
+                    bridge_connected = true;
+                    last_media_version = sip_call->media_version();
+                    LOG_INFO("audio bridge connected (GSM <-> SIP)");
+                } else {
                     state = BridgeState::SIP_FAILED;
                     break;
                 }
@@ -435,6 +466,20 @@ static void handle_bridged_call(AtCommander& at,
                 LOG_INFO("SIP party hung up");
                 state = BridgeState::ENDING;
                 break;
+            }
+
+            unsigned int cur_version = sip_call->media_version();
+            if (cur_version != last_media_version) {
+                LOG_INFO("SIP media renegotiated (version %u -> %u), reconnecting bridge",
+                         last_media_version, cur_version);
+                if (connect_media()) {
+                    last_media_version = cur_version;
+                    LOG_INFO("audio bridge reconnected (GSM <-> SIP)");
+                } else {
+                    LOG_ERROR("failed to reconnect media after renegotiation");
+                    state = BridgeState::SIP_FAILED;
+                    break;
+                }
             }
         }
 

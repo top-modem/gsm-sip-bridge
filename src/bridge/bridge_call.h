@@ -29,9 +29,14 @@ public:
         return media_connected_.load(std::memory_order_acquire);
     }
 
+    unsigned int media_version() const {
+        return media_version_.load(std::memory_order_acquire);
+    }
+
 private:
     BridgeAccount& owner_;
     std::atomic<SipCallState> sip_state_{SipCallState::DIALING};
     std::atomic<bool> media_connected_{false};
+    std::atomic<unsigned int> media_version_{0};
     std::chrono::steady_clock::time_point start_time_;
 };

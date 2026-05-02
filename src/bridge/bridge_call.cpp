@@ -53,7 +53,8 @@ void BridgeCall::onCallMediaState(pj::OnCallMediaStateParam& /*prm*/) {
         if (ci.media[i].type != PJMEDIA_TYPE_AUDIO) continue;
         if (ci.media[i].status != PJSUA_CALL_MEDIA_ACTIVE) continue;
 
-        LOG_INFO("SIP call media active on index %u", i);
+        unsigned int ver = media_version_.fetch_add(1, std::memory_order_acq_rel) + 1;
+        LOG_INFO("SIP call media active on index %u (version=%u)", i, ver);
         media_connected_.store(true, std::memory_order_release);
         return;
     }

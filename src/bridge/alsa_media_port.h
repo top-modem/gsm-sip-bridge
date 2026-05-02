@@ -24,4 +24,6 @@ public:
 private:
     RingBuffer<int16_t>& capture_buf_;
     RingBuffer<int16_t>& playback_buf_;
+    unsigned int frame_request_count_ = 0;
+    unsigned int silence_frame_count_ = 0;
 };

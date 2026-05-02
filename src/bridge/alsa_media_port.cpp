@@ -28,6 +28,20 @@ void AlsaMediaPort::onFrameRequested(pj::MediaFrame& frame) {
         std::memset(buf + read_count, 0,
                     (samples_needed - read_count) * sizeof(int16_t));
     }
+
+    ++frame_request_count_;
+    if (read_count == 0) {
+        ++silence_frame_count_;
+    } else {
+        silence_frame_count_ = 0;
+    }
+
+    static constexpr unsigned int WARN_THRESHOLD = 150; // 3 seconds at 20ms ptime
+    if (silence_frame_count_ == WARN_THRESHOLD) {
+        LOG_WARN("media port: %u consecutive silent frames (~3s), capture ring may be starved",
+                 WARN_THRESHOLD);
+    }
+
     frame.type = PJMEDIA_FRAME_TYPE_AUDIO;
 }
 
