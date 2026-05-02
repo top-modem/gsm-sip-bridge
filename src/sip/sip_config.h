@@ -21,4 +21,5 @@ struct SipConfig {
 
     std::string sip_uri() const;
     std::string registrar_uri() const;
+    std::string transport_param() const;
 };

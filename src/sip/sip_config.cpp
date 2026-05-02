@@ -76,10 +76,17 @@ SipConfig::LoadResult SipConfig::load(const std::string& path, SipConfig& out) {
     return {true, ""};
 }
 
+std::string SipConfig::transport_param() const {
+    if (transport != "udp") {
+        return ";transport=" + transport;
+    }
+    return "";
+}
+
 std::string SipConfig::sip_uri() const {
-    return "sip:" + username + "@" + server;
+    return "sip:" + username + "@" + server + transport_param();
 }
 
 std::string SipConfig::registrar_uri() const {
-    return "sip:" + server + ":" + std::to_string(port);
+    return "sip:" + server + ":" + std::to_string(port) + transport_param();
 }

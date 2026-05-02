@@ -607,7 +607,8 @@ int main(int argc, char* argv[]) {
     }
 
     std::string sip_server_suffix = "@" + sip_config.server
-                                    + ":" + std::to_string(sip_config.port);
+                                    + ":" + std::to_string(sip_config.port)
+                                    + sip_config.transport_param();
 
     LOG_INFO("ready, GSM calls will bridge to SIP %s (timeout=%us)",
              bridge_config.sip_destination.empty()
