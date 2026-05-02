@@ -2,7 +2,7 @@
 
 Bridge incoming GSM calls to a SIP extension over VoIP. When someone dials the GSM number on the Quectel EC20 module, the system auto-answers, dials a configurable SIP extension, and routes audio bidirectionally between the two parties.
 
-**Version**: 0.1.0 | **Language**: C++17 | **Platform**: Linux
+**Version**: 1.1.0 | **Language**: C++17 | **Platform**: Linux
 
 ## Prerequisites
 
@@ -66,7 +66,7 @@ transport = udp
 local_port = 5060
 
 [bridge]
-sip_destination = 599
+; sip_destination = 599
 sip_dial_timeout_sec = 30
 ```
 
@@ -79,7 +79,7 @@ sip_dial_timeout_sec = 30
 | `[sip]` | `transport` | `udp` | Transport protocol: `udp`, `tcp`, or `tls` |
 | `[sip]` | `local_port` | `5060` | Local SIP port (fixed to avoid stale registrations) |
 | `[sip]` | `display_name` | username | Display name shown to callees |
-| `[bridge]` | `sip_destination` | `599` | SIP extension to dial on incoming GSM call |
+| `[bridge]` | `sip_destination` | *(empty)* | SIP extension to dial. When empty, the GSM caller's number is used as the DID, letting the PBX inbound route decide the destination. |
 | `[bridge]` | `sip_dial_timeout_sec` | `30` | Seconds to wait for SIP answer (5-120) |
 
 The `[bridge]` section is optional; defaults apply if absent.
@@ -92,15 +92,98 @@ gsm-sip-bridge --config config.ini --verbose    # verbose SIP + AT logging
 gsm-sip-bridge -s /dev/ttyUSB3 -a hw:2,0       # override GSM devices
 ```
 
+### System Overview
+
+```mermaid
+flowchart LR
+    Phone["GSM Phone<br/>(Caller)"]
+    Tower["Cell Tower"]
+    EC20["Quectel EC20<br/>GSM Module"]
+    Server["Bridge Server<br/>(gsm-sip-bridge)"]
+    PBX["SIP PBX<br/>(Asterisk / FreePBX)"]
+    IPPhone["IP Phone /<br/>Softphone"]
+
+    Phone <-->|"GSM"| Tower
+    Tower <-->|"GSM"| EC20
+    EC20 <-->|"USB<br/>(Serial + Audio)"| Server
+    Server <-->|"SIP + RTP<br/>(TCP/UDP)"| PBX
+    PBX <-->|"SIP + RTP"| IPPhone
+```
+
 ### Call Flow
 
-1. GSM caller dials the module's number
-2. System auto-answers the GSM call
-3. GSM caller hears a repeating beep pattern (400 Hz, 200ms on/off)
-4. System dials the configured SIP extension
-5. When the SIP party answers, beep stops and bidirectional audio begins
-6. Either party hanging up terminates both legs
-7. System returns to idle, ready for the next call
+```mermaid
+sequenceDiagram
+    participant Caller as GSM Caller
+    participant EC20 as EC20 Modem
+    participant Bridge as gsm-sip-bridge
+    participant PBX as SIP PBX
+    participant Ext as SIP Extension
+
+    Note over Bridge: Idle, waiting for RING
+
+    Caller->>EC20: Dials GSM number
+    EC20->>Bridge: RING + CLIP (caller ID)
+    Bridge->>EC20: ATA (answer)
+    EC20-->>Caller: Call connected
+
+    Note over Bridge: Plays 400Hz beep to GSM caller
+
+    Bridge->>PBX: SIP INVITE (caller DID or fixed ext)
+    PBX->>Ext: Routes call via inbound rule
+    Ext-->>PBX: 180 Ringing
+    PBX-->>Bridge: 180 Ringing
+    Ext-->>PBX: 200 OK
+    PBX-->>Bridge: 200 OK + SDP
+
+    Note over Bridge: Stops beep, connects audio bridge
+
+    rect rgb(230, 245, 230)
+        Note over Caller, Ext: Bidirectional audio
+        Caller-->EC20: GSM audio
+        EC20-->Bridge: ALSA capture/playback
+        Bridge-->PBX: RTP (PCMA/PCMU)
+        PBX-->Ext: RTP
+    end
+
+    alt GSM caller hangs up
+        Caller->>EC20: Disconnect
+        EC20->>Bridge: NO CARRIER
+        Bridge->>PBX: BYE
+    else SIP party hangs up
+        Ext->>PBX: BYE
+        PBX->>Bridge: BYE
+        Bridge->>EC20: AT+CHUP
+    end
+
+    Note over Bridge: Idle, waiting for next call
+```
+
+### Audio Pipeline
+
+```mermaid
+flowchart LR
+    subgraph GSM["GSM Side"]
+        A[GSM Caller] <-->|Cellular| B[EC20 Modem]
+    end
+
+    subgraph Bridge["gsm-sip-bridge"]
+        direction TB
+        C[ALSA Capture<br/>hw:x,0] --> D[Ring Buffer<br/>SPSC lock-free]
+        D --> E[AlsaMediaPort]
+        E <--> F[PJSIP<br/>Conference Bridge]
+        G[Ring Buffer<br/>SPSC lock-free] --> H[ALSA Playback<br/>hw:x,0]
+        E --> G
+    end
+
+    subgraph SIP["SIP Side"]
+        I[SIP PBX] <-->|RTP| J[SIP Extension]
+    end
+
+    B <-->|USB Audio| C
+    B <-->|USB Audio| H
+    F <-->|RTP| I
+```
 
 If the SIP call fails (busy, timeout, unreachable), the GSM caller hears an error tone and the call is terminated.
 
@@ -151,7 +234,7 @@ src/
 vendor/
 └── mini/ini.h            # mINI header-only INI parser (MIT)
 
-tests/integration/        # 63 integration tests
+tests/integration/        # 70 integration tests
 ```
 
 ## ModemManager Interference
