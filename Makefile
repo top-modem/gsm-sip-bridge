@@ -1,8 +1,9 @@
 BUILD_DIR := build
 GSM_BINARY := $(BUILD_DIR)/audio-echo
 SIP_BINARY := $(BUILD_DIR)/sip-echo
+BRIDGE_BINARY := $(BUILD_DIR)/gsm-sip-bridge
 
-.PHONY: build test run run-sip clean lint help
+.PHONY: build test run run-sip run-bridge clean lint help
 
 build: ## Compile both audio-echo and sip-echo binaries
 	@cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -S .
@@ -18,6 +19,9 @@ run: build ## Build and run GSM audio-echo with auto-detection
 
 run-sip: build ## Build and run SIP echo server with config.ini
 	@$(SIP_BINARY) --config config.ini --verbose
+
+run-bridge: build ## Build and run GSM-SIP bridge with config.ini
+	@$(BRIDGE_BINARY) --config config.ini
 
 clean: ## Remove all build artifacts
 	@rm -rf $(BUILD_DIR)

@@ -21,3 +21,10 @@ transport = udp
 ; Using a fixed port prevents stale contact registrations on the PBX
 ; when the server restarts
 local_port = 5060
+
+[bridge]
+; SIP extension to dial when a GSM call arrives (optional, default: 599)
+sip_destination = 599
+
+; Timeout in seconds for the outbound SIP call (optional, default: 30, range: 5-120)
+sip_dial_timeout_sec = 30

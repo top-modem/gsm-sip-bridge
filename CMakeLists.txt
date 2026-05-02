@@ -60,6 +60,42 @@ target_compile_options(sip-echo PRIVATE
     ${PJSIP_CFLAGS_OTHER}
 )
 
+# --- GSM-SIP Bridge binary ---
+add_executable(gsm-sip-bridge
+    src/bridge/main.cpp
+    src/bridge/bridge_config.cpp
+    src/bridge/bridge_account.cpp
+    src/bridge/bridge_call.cpp
+    src/bridge/alsa_media_port.cpp
+    src/bridge/beep_generator.cpp
+    src/sip/sip_config.cpp
+    src/device_discovery.cpp
+    src/serial_port.cpp
+    src/at_commander.cpp
+)
+
+target_include_directories(gsm-sip-bridge PRIVATE
+    src
+    vendor
+    ${ALSA_INCLUDE_DIRS}
+    ${PJSIP_INCLUDE_DIRS}
+)
+
+target_link_libraries(gsm-sip-bridge PRIVATE
+    ${ALSA_LIBRARIES}
+    ${PJSIP_LIBRARIES}
+    pthread
+)
+
+target_link_directories(gsm-sip-bridge PRIVATE
+    ${PJSIP_LIBRARY_DIRS}
+)
+
+target_compile_options(gsm-sip-bridge PRIVATE
+    -Wall -Wextra -Wpedantic -Werror
+    ${PJSIP_CFLAGS_OTHER}
+)
+
 enable_testing()
 
 find_package(GTest QUIET)
@@ -135,9 +171,45 @@ if(GTest_FOUND)
         ${PJSIP_CFLAGS_OTHER}
     )
 
+    add_executable(bridge-tests
+        tests/integration/test_bridge_config.cpp
+        tests/integration/test_ring_buffer.cpp
+        tests/integration/test_beep_generator.cpp
+        tests/integration/test_bridge_call.cpp
+        src/bridge/bridge_config.cpp
+        src/bridge/bridge_account.cpp
+        src/bridge/bridge_call.cpp
+        src/bridge/alsa_media_port.cpp
+        src/bridge/beep_generator.cpp
+        src/sip/sip_config.cpp
+    )
+
+    target_include_directories(bridge-tests PRIVATE
+        src
+        vendor
+        tests/integration
+        ${PJSIP_INCLUDE_DIRS}
+    )
+
+    target_link_libraries(bridge-tests PRIVATE
+        GTest::gtest GTest::gtest_main
+        ${PJSIP_LIBRARIES}
+        pthread
+    )
+
+    target_link_directories(bridge-tests PRIVATE
+        ${PJSIP_LIBRARY_DIRS}
+    )
+
+    target_compile_options(bridge-tests PRIVATE
+        -Wall -Wextra -Wpedantic
+        ${PJSIP_CFLAGS_OTHER}
+    )
+
     include(GoogleTest)
     gtest_discover_tests(audio-echo-tests)
     gtest_discover_tests(sip-echo-tests)
+    gtest_discover_tests(bridge-tests)
 else()
     message(WARNING "GTest not found, tests will not be built")
 endif()
