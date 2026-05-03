@@ -28,7 +28,7 @@ set(ENABLE_TESTING OFF CACHE BOOL "Disable prometheus-cpp tests" FORCE)
 set(GENERATE_PKGCONFIG OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(prometheus-cpp)
 
-add_executable(audio-echo
+add_executable(gsm-echo
     src/main.cpp
     src/device_discovery.cpp
     src/serial_port.cpp
@@ -36,17 +36,17 @@ add_executable(audio-echo
     src/audio_loop.cpp
 )
 
-target_include_directories(audio-echo PRIVATE
+target_include_directories(gsm-echo PRIVATE
     src
     ${ALSA_INCLUDE_DIRS}
 )
 
-target_link_libraries(audio-echo PRIVATE
+target_link_libraries(gsm-echo PRIVATE
     ${ALSA_LIBRARIES}
     pthread
 )
 
-target_compile_options(audio-echo PRIVATE
+target_compile_options(gsm-echo PRIVATE
     -Wall -Wextra -Wpedantic -Werror
 )
 
@@ -137,7 +137,7 @@ if(NOT GTest_FOUND)
 endif()
 
 if(GTest_FOUND)
-    add_executable(audio-echo-tests
+    add_executable(gsm-echo-tests
         tests/integration/test_device_discovery.cpp
         tests/integration/test_serial_port.cpp
         tests/integration/test_at_commander.cpp
@@ -149,20 +149,20 @@ if(GTest_FOUND)
         src/audio_loop.cpp
     )
 
-    target_include_directories(audio-echo-tests PRIVATE
+    target_include_directories(gsm-echo-tests PRIVATE
         src
         tests/integration
         ${ALSA_INCLUDE_DIRS}
     )
 
-    target_link_libraries(audio-echo-tests PRIVATE
+    target_link_libraries(gsm-echo-tests PRIVATE
         GTest::gtest GTest::gtest_main
         ${ALSA_LIBRARIES}
         pthread
         util
     )
 
-    target_compile_options(audio-echo-tests PRIVATE
+    target_compile_options(gsm-echo-tests PRIVATE
         -Wall -Wextra -Wpedantic
     )
 
@@ -244,7 +244,7 @@ if(GTest_FOUND)
     )
 
     include(GoogleTest)
-    gtest_discover_tests(audio-echo-tests)
+    gtest_discover_tests(gsm-echo-tests)
     gtest_discover_tests(sip-echo-tests)
     gtest_discover_tests(bridge-tests)
 else()

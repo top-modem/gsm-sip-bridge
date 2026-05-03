@@ -58,7 +58,7 @@ static int parse_args(int argc, char* argv[], CliArgs& args) {
             case 'v': args.verbose = true;           break;
             case 'h': print_usage(argv[0]); return -1;
             case 'V':
-                std::printf("audio-echo %s\n", VERSION);
+                std::printf("gsm-echo %s\n", VERSION);
                 return -1;
             default:
                 print_usage(argv[0]);
@@ -175,7 +175,7 @@ int main(int argc, char* argv[]) {
     int parse_result = parse_args(argc, argv, args);
     if (parse_result != 0) return parse_result < 0 ? 0 : parse_result;
 
-    LOG_INFO("audio-echo v%s starting", VERSION);
+    LOG_INFO("gsm-echo v%s starting", VERSION);
 
     struct sigaction sa{};
     sa.sa_handler = signal_handler;
@@ -186,7 +186,7 @@ int main(int argc, char* argv[]) {
     if (std::system("systemctl is-active --quiet ModemManager 2>/dev/null") == 0) {
         LOG_WARN("ModemManager is running and may interfere with serial access");
         LOG_WARN("consider: sudo systemctl stop ModemManager");
-        LOG_WARN("permanent fix: install etc/99-ec20-audio-echo.rules to /etc/udev/rules.d/");
+        LOG_WARN("permanent fix: install etc/99-ec20-gsm-sip-bridge.rules to /etc/udev/rules.d/");
     }
 
     DeviceInfo device = resolve_device(args);

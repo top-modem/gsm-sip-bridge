@@ -23,7 +23,7 @@ sudo apt install build-essential cmake g++ libasound2-dev libpjproject-dev
 ## Quick Start
 
 ```bash
-git clone <repo-url> && cd audio-echo
+git clone <repo-url> && cd gsm-sip-bridge
 cp config.ini.example config.ini    # edit with your SIP credentials
 make build
 make test
@@ -322,7 +322,7 @@ Two standalone echo tools are included for isolating GSM or SIP issues independe
 ModemManager probes `ttyUSB*` ports for modems, which corrupts AT sessions. The program warns at startup if ModemManager is active. To fix permanently, install the included udev rule:
 
 ```bash
-sudo cp etc/99-ec20-audio-echo.rules /etc/udev/rules.d/
+sudo cp etc/99-ec20-gsm-sip-bridge.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 

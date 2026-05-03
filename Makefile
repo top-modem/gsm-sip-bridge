@@ -1,6 +1,6 @@
 BUILD_DIR := build
 BRIDGE_BINARY := $(BUILD_DIR)/gsm-sip-bridge
-GSM_ECHO_BINARY := $(BUILD_DIR)/audio-echo
+GSM_ECHO_BINARY := $(BUILD_DIR)/gsm-echo
 SIP_ECHO_BINARY := $(BUILD_DIR)/sip-echo
 
 .PHONY: build test run run-gsm-echo run-sip-echo docker clean lint help

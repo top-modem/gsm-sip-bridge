@@ -55,7 +55,7 @@ COPY --from=builder /usr/local/lib/*.so* /usr/local/lib/
 RUN ldconfig
 
 COPY --from=builder /src/build/gsm-sip-bridge /usr/local/bin/gsm-sip-bridge
-COPY --from=builder /src/build/audio-echo /usr/local/bin/audio-echo
+COPY --from=builder /src/build/gsm-echo /usr/local/bin/gsm-echo
 COPY --from=builder /src/build/sip-echo /usr/local/bin/sip-echo
 COPY config.ini.example /etc/gsm-sip-bridge/config.ini.example
 

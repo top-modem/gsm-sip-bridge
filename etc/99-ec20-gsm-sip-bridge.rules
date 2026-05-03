@@ -1,5 +1,5 @@
 # Prevent ModemManager from probing the Quectel EC20 AT command port.
-# Install: sudo cp 99-ec20-audio-echo.rules /etc/udev/rules.d/
+# Install: sudo cp 99-ec20-gsm-sip-bridge.rules /etc/udev/rules.d/
 #          sudo udevadm control --reload-rules && sudo udevadm trigger
 #
 # The EC20 exposes 4 ttyUSB ports (0-3). Port 2 is the primary AT channel.
