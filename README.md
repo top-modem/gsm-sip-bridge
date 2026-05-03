@@ -2,7 +2,7 @@
 
 Bridge incoming GSM calls to a SIP extension over VoIP. When someone dials the GSM number on a Quectel EC20 module, the system auto-answers, dials a configurable SIP extension, and routes audio bidirectionally between the two parties. Supports multiple EC20 modules simultaneously. Incoming SMS messages are persisted to a local database and optionally forwarded to Discord.
 
-**Version**: 4.0.0 | **Language**: C++17 | **Platform**: Linux
+**Version**: 4.1.0 | **Language**: C++17 | **Platform**: Linux
 
 ## Features
 
@@ -11,6 +11,7 @@ Bridge incoming GSM calls to a SIP extension over VoIP. When someone dials the G
 - **Automatic Module Recovery** -- Failed modules (SIM issues, serial errors) are retried every 30 seconds and rejoin the active pool when functional.
 - **DID Passthrough** -- Forwards the GSM caller's number as the SIP DID, enabling PBX inbound routing rules to decide the destination.
 - **SMS-to-Discord Forwarding** -- Captures incoming SMS from all modules, persists to a local SQLite database, and posts rich embed notifications to a Discord webhook.
+- **Call Logging** -- Every incoming GSM call is recorded in a local SQLite database with caller ID, module, timestamp, duration, SIP destination, and outcome (answered/missed/failed).
 - **SMS Persistence** -- All received SMS messages are stored in SQLite with sender, body, timestamp, and forwarding status, surviving restarts and Discord outages.
 - **Prometheus Metrics** -- Exposes call counts, SIP registration state, module health, audio errors, SMS throughput, and call duration histograms on a `/metrics` endpoint.
 - **Grafana Dashboard** -- Ships a pre-provisioned dashboard with panels for system overview, call rates, active calls, duration percentiles, module health, and SMS forwarding.
@@ -170,6 +171,30 @@ When an SMS arrives on any connected EC20 module:
 4. Forwarded to Discord as a rich embed notification (if webhook URL is configured)
 
 SMS monitoring runs independently of call handling and does not interfere with incoming call processing. If the Discord webhook is unreachable, the SMS is still safely stored in the database with a `failed` status.
+
+### Call & SMS Database
+
+All incoming calls and SMS messages are persisted to the same SQLite database (`db_path` in the `[sms]` config section). The database uses WAL mode for concurrent read/write access across threads.
+
+**Calls table** -- each incoming GSM call is logged with:
+
+| Column | Description |
+|---|---|
+| `module_id` | Card identifier (e.g., `ec20-A1B2C3`) |
+| `caller_id` | GSM caller's phone number |
+| `started_at` | ISO 8601 timestamp (UTC) |
+| `duration_seconds` | Call duration in seconds (0.0 for missed calls) |
+| `status` | `answered`, `missed`, or `failed` |
+| `sip_destination` | SIP extension dialed (empty for missed calls) |
+
+**SMS table** -- each incoming SMS is logged with sender, body, timestamp, module ID, and Discord forwarding status (`pending`, `sent`, `failed`, `skipped`).
+
+Query examples:
+
+```bash
+sqlite3 /var/lib/gsm-sip-bridge/sms.db "SELECT * FROM calls ORDER BY id DESC LIMIT 10;"
+sqlite3 /var/lib/gsm-sip-bridge/sms.db "SELECT * FROM sms ORDER BY id DESC LIMIT 10;"
+```
 
 ## Observability
 

@@ -108,6 +108,7 @@ add_executable(gsm-sip-bridge
     src/bridge/metrics.cpp
     src/bridge/sms_store.cpp
     src/bridge/sms_handler.cpp
+    src/bridge/call_store.cpp
     src/sip/sip_config.cpp
     src/device_discovery.cpp
     src/serial_port.cpp
@@ -226,6 +227,7 @@ if(GTest_FOUND)
         tests/integration/test_metrics.cpp
         tests/integration/test_sms_store.cpp
         tests/integration/test_sms_handler.cpp
+        tests/integration/test_call_store.cpp
         src/bridge/bridge_config.cpp
         src/bridge/bridge_account.cpp
         src/bridge/bridge_call.cpp
@@ -236,6 +238,7 @@ if(GTest_FOUND)
         src/bridge/metrics.cpp
         src/bridge/sms_store.cpp
         src/bridge/sms_handler.cpp
+        src/bridge/call_store.cpp
         src/sip/sip_config.cpp
         src/device_discovery.cpp
         src/serial_port.cpp

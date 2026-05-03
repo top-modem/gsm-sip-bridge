@@ -11,6 +11,7 @@
 #include <vector>
 
 class BridgeAccount;
+class CallStore;
 class SmsHandler;
 struct SipConfig;
 
@@ -37,13 +38,15 @@ public:
                    const BridgeConfig& bridge_config,
                    const SipConfig& sip_config,
                    std::atomic<bool>& running,
-                   SmsHandler* sms_handler = nullptr);
+                   SmsHandler* sms_handler = nullptr,
+                   CallStore* call_store = nullptr);
 
     void start_retry_thread(BridgeAccount& account,
                             const BridgeConfig& bridge_config,
                             const SipConfig& sip_config,
                             std::atomic<bool>& running,
-                            SmsHandler* sms_handler = nullptr);
+                            SmsHandler* sms_handler = nullptr,
+                            CallStore* call_store = nullptr);
 
     void stop_all();
 
@@ -56,7 +59,8 @@ private:
                     const BridgeConfig& bridge_config,
                     const SipConfig& sip_config,
                     std::atomic<bool>& running,
-                    SmsHandler* sms_handler);
+                    SmsHandler* sms_handler,
+                    CallStore* call_store);
 
     mutable std::mutex mutex_;
     std::vector<std::unique_ptr<CardInstance>> active_cards_;

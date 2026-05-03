@@ -11,6 +11,7 @@
 #include <thread>
 
 class BridgeAccount;
+class CallStore;
 class SmsHandler;
 struct SipConfig;
 
@@ -43,7 +44,8 @@ public:
                const BridgeConfig& bridge_config,
                const SipConfig& sip_config,
                std::atomic<bool>& running,
-               SmsHandler* sms_handler = nullptr);
+               SmsHandler* sms_handler = nullptr,
+               CallStore* call_store = nullptr);
 
     void stop();
 
@@ -58,7 +60,8 @@ private:
                   const BridgeConfig& bridge_config,
                   const SipConfig& sip_config,
                   std::atomic<bool>& running,
-                  SmsHandler* sms_handler);
+                  SmsHandler* sms_handler,
+                  CallStore* call_store);
 
     void handle_bridged_call(AtCommander& at,
                              BridgeAccount& account,
