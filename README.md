@@ -4,6 +4,21 @@ Bridge incoming GSM calls to a SIP extension over VoIP. When someone dials the G
 
 **Version**: 4.0.0 | **Language**: C++17 | **Platform**: Linux
 
+## Features
+
+- **GSM-to-SIP Call Bridging** -- Auto-answers incoming GSM calls on Quectel EC20 modules and bridges audio bidirectionally to a SIP extension via a PBX.
+- **Multi-Module Support** -- Detects all connected EC20 modules at startup, assigns stable hardware IDs, and handles concurrent calls across modules independently.
+- **Automatic Module Recovery** -- Failed modules (SIM issues, serial errors) are retried every 30 seconds and rejoin the active pool when functional.
+- **DID Passthrough** -- Forwards the GSM caller's number as the SIP DID, enabling PBX inbound routing rules to decide the destination.
+- **SMS-to-Discord Forwarding** -- Captures incoming SMS from all modules, persists to a local SQLite database, and posts rich embed notifications to a Discord webhook.
+- **SMS Persistence** -- All received SMS messages are stored in SQLite with sender, body, timestamp, and forwarding status, surviving restarts and Discord outages.
+- **Prometheus Metrics** -- Exposes call counts, SIP registration state, module health, audio errors, SMS throughput, and call duration histograms on a `/metrics` endpoint.
+- **Grafana Dashboard** -- Ships a pre-provisioned dashboard with panels for system overview, call rates, active calls, duration percentiles, module health, and SMS forwarding.
+- **Docker Compose Stack** -- One-command deployment with the bridge, Prometheus, and Grafana running in host network mode.
+- **Lock-Free Audio Pipeline** -- SPSC ring buffers connect ALSA capture/playback to the PJSIP conference bridge with minimal latency per module.
+- **Configurable Beep Tone** -- Plays a ringing-style beep to the GSM caller while the SIP extension is being dialed.
+- **USB Device Auto-Discovery** -- Scans the USB bus by vendor/product ID, matches serial numbers for stable identification, and maps AT command ports to audio devices.
+
 ## Prerequisites
 
 - Linux (Debian/Ubuntu recommended)
