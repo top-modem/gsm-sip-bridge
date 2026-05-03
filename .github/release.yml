@@ -1,0 +1,18 @@
+changelog:
+  categories:
+    - title: Features
+      labels:
+        - enhancement
+      patterns:
+        - "^feat"
+    - title: Bug Fixes
+      labels:
+        - bug
+      patterns:
+        - "^fix"
+    - title: Performance
+      patterns:
+        - "^perf"
+    - title: Other Changes
+      labels:
+        - "*"

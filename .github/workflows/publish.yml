@@ -58,11 +58,46 @@ jobs:
             type=gha,scope=pjsip-${{ env.PJSIP_VERSION }},mode=max
             type=gha,scope=build-${{ github.ref_name }},mode=max
 
+      - name: Read release notes
+        id: release_notes
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ -f RELEASE_NOTES.md ]; then
+            SECTION=$(awk "/^## v${TAG}\$/,/^## v/" RELEASE_NOTES.md | sed '$ { /^## v/d }' | sed '1d')
+            if [ -n "$SECTION" ]; then
+              {
+                echo 'NOTES<<RELEASE_EOF'
+                echo '## What'\''s New'
+                echo "$SECTION"
+                echo 'RELEASE_EOF'
+              } >> "$GITHUB_OUTPUT"
+            else
+              {
+                echo 'NOTES<<RELEASE_EOF'
+                echo '## What'\''s New'
+                echo ''
+                echo "See [Full Changelog](https://github.com/${{ github.repository }}/releases/tag/${GITHUB_REF_NAME}) for details."
+                echo ''
+                echo 'RELEASE_EOF'
+              } >> "$GITHUB_OUTPUT"
+            fi
+          else
+            {
+              echo 'NOTES<<RELEASE_EOF'
+              echo '## What'\''s New'
+              echo ''
+              echo "See [Full Changelog](https://github.com/${{ github.repository }}/releases/tag/${GITHUB_REF_NAME}) for details."
+              echo ''
+              echo 'RELEASE_EOF'
+            } >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          generate_release_notes: false
           body: |
+            ${{ steps.release_notes.outputs.NOTES }}
             ## Docker Image
 
             ```
