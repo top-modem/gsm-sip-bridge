@@ -48,6 +48,15 @@ services:
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
 
+  sqlite-web:
+    image: ghcr.io/coleifer/sqlite-web:latest
+    container_name: gsm-bridge-sqlite-web
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - sms-data:/data
+    command: sms.db -H 0.0.0.0 -p 8088 -r -x
+
 volumes:
   sms-data:
   prometheus-data:

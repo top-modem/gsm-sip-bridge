@@ -241,6 +241,7 @@ docker compose up -d --build
 | gsm-sip-bridge | `http://localhost:9091/metrics` | Metrics endpoint |
 | Prometheus | `http://localhost:9090` | Metrics collection and querying |
 | Grafana | `http://localhost:3000` | Dashboards and visualization |
+| sqlite-web | `http://localhost:8088` | Browse call and SMS database (read-only) |
 
 Grafana credentials: `admin` / `admin`. The "GSM-SIP Bridge" dashboard is auto-provisioned on first boot.
 
