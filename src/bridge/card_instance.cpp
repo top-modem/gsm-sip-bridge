@@ -5,6 +5,7 @@
 #include "bridge/beep_generator.h"
 #include "bridge/metrics.h"
 #include "bridge/sms_handler.h"
+#include "bridge/call_store.h"
 #include "ring_buffer.h"
 #include "sip/sip_config.h"
 #include "logger.h"
@@ -29,6 +30,16 @@ static constexpr unsigned int ERROR_TONE_HZ = 200;
 static constexpr unsigned int ERROR_TONE_ON_MS = 500;
 static constexpr unsigned int ERROR_TONE_OFF_MS = 100;
 static constexpr unsigned int ERROR_TONE_DURATION_MS = 2000;
+
+static std::string utc_now_iso8601() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    struct tm tm_buf{};
+    gmtime_r(&t, &tm_buf);
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tm_buf);
+    return buf;
+}
 
 static constexpr int CLIP_WAIT_MS = 300;
 static constexpr size_t CARD_ID_SUFFIX_LEN = 6;
@@ -207,11 +218,12 @@ void CardInstance::start(BridgeAccount& account,
                          const BridgeConfig& bridge_config,
                          const SipConfig& sip_config,
                          std::atomic<bool>& running,
-                         SmsHandler* sms_handler) {
+                         SmsHandler* sms_handler,
+                         CallStore* call_store) {
     thread_ = std::thread(&CardInstance::run_loop, this,
                           std::ref(account), std::cref(bridge_config),
                           std::cref(sip_config), std::ref(running),
-                          sms_handler);
+                          sms_handler, call_store);
 }
 
 void CardInstance::stop() {
@@ -630,7 +642,8 @@ void CardInstance::run_loop(BridgeAccount& account,
                             const BridgeConfig& bridge_config,
                             const SipConfig& sip_config,
                             std::atomic<bool>& running,
-                            SmsHandler* sms_handler) {
+                            SmsHandler* sms_handler,
+                            CallStore* call_store) {
     pj_thread_desc thread_desc = {};
     pj_thread_t* pj_thread = nullptr;
     pj_status_t status = pj_thread_register(card_id_.c_str(), thread_desc, &pj_thread);
@@ -701,9 +714,19 @@ void CardInstance::run_loop(BridgeAccount& account,
 
             metrics::gsm_call_incoming(card_id_, caller);
 
+            std::string call_started_at = utc_now_iso8601();
+
             if (!account.is_registered()) {
                 LOG_WARN("[%s] SIP not registered, ignoring GSM call", card_id_.c_str());
                 metrics::gsm_call_missed(card_id_);
+                if (call_store) {
+                    CallRecord rec;
+                    rec.module_id = card_id_;
+                    rec.caller_id = caller;
+                    rec.started_at = call_started_at;
+                    rec.status = "missed";
+                    call_store->insert(rec);
+                }
                 at_->hangup();
                 continue;
             }
@@ -721,6 +744,14 @@ void CardInstance::run_loop(BridgeAccount& account,
                 if (sip_user.empty()) {
                     LOG_WARN("[%s] no SIP destination and no caller ID, cannot route call",
                              card_id_.c_str());
+                    if (call_store) {
+                        CallRecord rec;
+                        rec.module_id = card_id_;
+                        rec.caller_id = caller;
+                        rec.started_at = call_started_at;
+                        rec.status = "failed";
+                        call_store->insert(rec);
+                    }
                     at_->hangup();
                     continue;
                 }
@@ -730,13 +761,37 @@ void CardInstance::run_loop(BridgeAccount& account,
                 LOG_INFO("[%s] GSM call answered, bridging to %s (caller: %s)",
                          card_id_.c_str(), sip_dest_uri.c_str(),
                          caller.empty() ? "unknown" : caller.c_str());
+
+                auto bridge_start = std::chrono::steady_clock::now();
                 handle_bridged_call(*at_, account, sip_dest_uri,
                                     bridge_config.sip_dial_timeout_sec,
                                     caller, running);
+                double duration = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - bridge_start).count();
+
+                if (call_store) {
+                    CallRecord rec;
+                    rec.module_id = card_id_;
+                    rec.caller_id = caller;
+                    rec.started_at = call_started_at;
+                    rec.duration_seconds = duration;
+                    rec.status = "answered";
+                    rec.sip_destination = sip_user;
+                    call_store->insert(rec);
+                }
+
                 LOG_INFO("[%s] idle, waiting for next GSM call", card_id_.c_str());
             } else {
                 LOG_ERROR("[%s] failed to answer GSM call", card_id_.c_str());
                 metrics::gsm_call_missed(card_id_);
+                if (call_store) {
+                    CallRecord rec;
+                    rec.module_id = card_id_;
+                    rec.caller_id = caller;
+                    rec.started_at = call_started_at;
+                    rec.status = "missed";
+                    call_store->insert(rec);
+                }
             }
         }
     }
