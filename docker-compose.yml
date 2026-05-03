@@ -19,7 +19,7 @@ services:
       - audio
       - dialout
 
-  prometheus:
+  prometheus: # optional and only if you want to use Prometheus and Grafana
     image: prom/prometheus:v3.4.0
     container_name: gsm-bridge-prometheus
     restart: unless-stopped
@@ -32,7 +32,7 @@ services:
       - "--storage.tsdb.retention.time=7d"
       - "--web.listen-address=:9090"
 
-  grafana:
+  grafana: # optional and only if you want to use Prometheus and Grafana
     image: grafana/grafana-oss:11.6.0
     container_name: gsm-bridge-grafana
     restart: unless-stopped
@@ -48,14 +48,14 @@ services:
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
 
-  sqlite-web:
+  sqlite-web: # optional
     image: ghcr.io/coleifer/sqlite-web:latest
     container_name: gsm-bridge-sqlite-web
     restart: unless-stopped
     network_mode: host
     volumes:
       - sms-data:/data
-    command: sms.db -H 0.0.0.0 -p 8088 -r -x
+    command: data.db -H 0.0.0.0 -p 8088 -r -x
 
 volumes:
   sms-data:

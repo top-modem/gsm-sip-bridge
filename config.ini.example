@@ -37,7 +37,7 @@ enabled = true
 ; discord_webhook_url = https://discord.com/api/webhooks/123456789/abcdef
 
 ; Path to SQLite database for SMS persistence (optional)
-db_path = /var/lib/gsm-sip-bridge/sms.db
+db_path = /var/lib/gsm-sip-bridge/data.db
 
 ; SIM phone number shown in Discord notifications (optional)
 ; Used as fallback when AT+CNUM does not return the number from the SIM
