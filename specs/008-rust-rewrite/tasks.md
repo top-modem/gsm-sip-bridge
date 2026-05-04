@@ -85,13 +85,13 @@ All paths below are relative to the repo root.
 
 ### pjsua-sys (FFI)
 
-- [ ] T025 [US1] `pjsua-sys/build.rs` — `pkg-config` probe asserting `libpjproject >= 2.14`; bindgen invocation generating `bindings.rs` from `pjsua.h` and `pjmedia/sound_port.h`; emit `cargo:rustc-link-lib` directives for `pjsua`, `pjsip`, `pjmedia`, `pj`, `pjlib-util`, plus the SSL/SRTP/UUID transitive deps
-- [ ] T026 [US1] `pjsua-sys/src/lib.rs` — `include!(concat!(env!("OUT_DIR"), "/bindings.rs"));` plus a build smoke test compiling against the FFI symbols
+- [x] T025 [US1] `pjsua-sys/build.rs` — `pkg-config` probe asserting `libpjproject >= 2.14`; bindgen invocation generating `bindings.rs` from `pjsua.h` and `pjmedia/sound_port.h`; emit `cargo:rustc-link-lib` directives for `pjsua`, `pjsip`, `pjmedia`, `pj`, `pjlib-util`, plus the SSL/SRTP/UUID transitive deps
+- [x] T026 [US1] `pjsua-sys/src/lib.rs` — `include!(concat!(env!("OUT_DIR"), "/bindings.rs"));` plus a build smoke test compiling against the FFI symbols
 
 ### pjsua-safe (safe wrappers — every `unsafe` block carries `// SAFETY: ...` per FR-080)
 
 - [ ] T027 [P] [US1] Test: `pjsua-safe/tests/smoke.rs` — boot an `Endpoint`, configure a UDP transport, register an `Account` against the localhost SIP loopback (from T010), assert registration succeeds within 5 s
-- [ ] T028 [P] [US1] `pjsua-safe/src/error.rs` — `PjsipError` enum mapping every `pj_status_t` we care about; `pj_status_to_str` helper
+- [x] T028 [P] [US1] `pjsua-safe/src/error.rs` — `PjsipError` enum mapping every `pj_status_t` we care about; `pj_status_to_str` helper
 - [ ] T029 [P] [US1] `pjsua-safe/src/log_bridge.rs` — `pjsua_logging_config` callback that forwards every PJSIP log line to `tracing` under target `sip`
 - [ ] T030 [US1] `pjsua-safe/src/endpoint.rs` — `Endpoint::create(EndpointConfig)` wrapping `pjsua_create` + `pjsua_init` + `pjsua_transport_create` (UDP/TCP/TLS) + `pjsua_start`; `Drop` impl calls `pjsua_destroy`; honours `tls_verify=strict|skip` from R-03 (depends on T028, T029)
 - [ ] T031 [US1] `pjsua-safe/src/account.rs` — `Account::register(&Endpoint, AccountConfig)` returning a typed handle; expose registration callbacks via a `RegistrationListener` trait (depends on T030)
@@ -100,15 +100,15 @@ All paths below are relative to the repo root.
 
 ### USB / Serial / AT / Audio (gsm-sip-bridge crate, zero `unsafe`)
 
-- [ ] T034 [P] [US1] Test: `gsm-sip-bridge/tests/test_discovery.rs` — fake the USB scan via a trait + injectable test impl; verify vendor/product matching (`0x2c7c:0x0125`), stable ID derivation (`ec20-` + uppercase last 6 hex of USB serial), AT-port-vs-audio-device mapping
+- [x] T034 [P] [US1] Test: `gsm-sip-bridge/tests/test_discovery.rs` — fake the USB scan via a trait + injectable test impl; verify vendor/product matching (`0x2c7c:0x0125`), stable ID derivation (`ec20-` + uppercase last 6 hex of USB serial), AT-port-vs-audio-device mapping
 - [ ] T035 [P] [US1] Test: `gsm-sip-bridge/tests/test_at_commander.rs` — drive the AT commander against a PTY (T009); verify happy paths (CSQ, COPS, CMGR, CMGD, CHUP, ATA), error paths (`+CME ERROR`), and timeout
-- [ ] T036 [P] [US1] Test: `gsm-sip-bridge/tests/test_beep_generator.rs` — verify the 400 Hz sine fills a buffer with the expected amplitude/period; verify it produces silence after a stop signal
+- [x] T036 [P] [US1] Test: `gsm-sip-bridge/tests/test_beep_generator.rs` — verify the 400 Hz sine fills a buffer with the expected amplitude/period; verify it produces silence after a stop signal
 - [ ] T037 [P] [US1] Test: `gsm-sip-bridge/tests/test_audio_pipeline.rs` — connect the SPSC ring buffer between an in-memory producer (simulating ALSA capture) and consumer (simulating PJSIP read); verify zero-loss steady state and that overrun is counted in metrics
-- [ ] T038 [P] [US1] `gsm-sip-bridge/src/modules/discovery.rs` — `rusb`-based scan; vendor/product match; serial-number derivation; AT-port vs ALSA card mapping; supports the single-card override path (matching `--serial` to a discovered device)
-- [ ] T039 [P] [US1] `gsm-sip-bridge/src/modules/at_commander.rs` — `serialport`-based AT commander; per-command timeout; line-oriented `OK`/`ERROR`/`+CME ERROR`/`+CMTI`/`RING` parsing; trace logging under target `at`
-- [ ] T040 [P] [US1] `gsm-sip-bridge/src/modules/beep.rs` — pure-Rust 400 Hz sine generator; produces 16-bit signed mono frames at 8 kHz
-- [ ] T041 [US1] `gsm-sip-bridge/src/modules/audio_pipeline.rs` — per-module ALSA capture and playback threads; `crossbeam_queue::ArrayQueue` for SPSC frame transfer; counts underrun/overrun into `gsm_sip_bridge_audio_errors_total` (depends on T024)
-- [ ] T042 [US1] `gsm-sip-bridge/src/sip/alsa_media_port.rs` — implements `pjsua_safe::AudioMediaPort` reading from the playback ring and writing to the capture ring; bridges to the conference slot returned by `Call::conf_slot()` (depends on T033, T041)
+- [x] T038 [P] [US1] `gsm-sip-bridge/src/modules/discovery.rs` — `rusb`-based scan; vendor/product match; serial-number derivation; AT-port vs ALSA card mapping; supports the single-card override path (matching `--serial` to a discovered device)
+- [x] T039 [P] [US1] `gsm-sip-bridge/src/modules/at_commander.rs` — `serialport`-based AT commander; per-command timeout; line-oriented `OK`/`ERROR`/`+CME ERROR`/`+CMTI`/`RING` parsing; trace logging under target `at`
+- [x] T040 [P] [US1] `gsm-sip-bridge/src/modules/beep.rs` — pure-Rust 400 Hz sine generator; produces 16-bit signed mono frames at 8 kHz
+- [x] T041 [US1] `gsm-sip-bridge/src/modules/audio_pipeline.rs` — per-module ALSA capture and playback threads; `crossbeam_queue::ArrayQueue` for SPSC frame transfer; counts underrun/overrun into `gsm_sip_bridge_audio_errors_total` (depends on T024)
+- [x] T042 [US1] `gsm-sip-bridge/src/sip/alsa_media_port.rs` — implements `pjsua_safe::AudioMediaPort` reading from the playback ring and writing to the capture ring; bridges to the conference slot returned by `Call::conf_slot()` (depends on T033, T041)
 
 ### Bridge logic (multi-card pool, RING handling, beep, retry)
 
@@ -117,12 +117,12 @@ All paths below are relative to the repo root.
 - [ ] T045 [US1] Test: `gsm-sip-bridge/tests/test_bridge_call.rs` — full GSM↔SIP bridge: PTY scripts a RING + CLIP, the bridge plays beep, INVITEs the loopback PBX, PBX sends `200 OK`, audio frames flow in both directions for 5 seconds, GSM-side hangup tears down SIP cleanly. Covers US1 acceptance scenarios 1, 3, 4, 7
 - [ ] T046 [US1] Test: `gsm-sip-bridge/tests/test_bridge_call.rs::sip_unreachable` — same setup with PBX scripted to ignore INVITE; assert dial-timeout produces an error indication to GSM caller and the call is recorded with `status=failed` (covers US1 scenario 7)
 - [ ] T047 [US1] Test: `gsm-sip-bridge/tests/test_end_to_end.rs::three_cards_concurrent` — three PTY-backed modules each receive a RING simultaneously; assert three independent SIP INVITEs, three audio bridges, and one teardown does not affect the others (covers US1 scenario 2)
-- [ ] T048 [US1] `gsm-sip-bridge/src/modules/card.rs` — `CardInstance` state machine: Idle → Ringing → Answering → Bridged → Cleanup; emits `gsm_sip_bridge_calls_total{status=incoming|answered|missed}` and `gsm_sip_bridge_active_calls{module}` (depends on T039, T040, T041, T042)
-- [ ] T049 [US1] `gsm-sip-bridge/src/modules/mod.rs` — `CardPool`: detection at startup, dispatch RING events to the matching `CardInstance`, retry-thread for failed modules at the configured interval, emits `gsm_sip_bridge_module_init_total`, `_module_retries_total`, `_modules_active`, `_modules_failed` (depends on T038, T048)
-- [ ] T050 [US1] `gsm-sip-bridge/src/sip/mod.rs` — `SipBridge`: owns the `Endpoint` + `Account`; on RING from a CardInstance, computes the SIP destination URI (DID passthrough vs fixed `[bridge].sip_destination`), starts a `Call`, watches for state changes, swaps the AudioMediaPort in/out at answer/teardown; emits `gsm_sip_bridge_sip_calls_total`, `_sip_registrations_total`, `_sip_registered`, `_call_duration_seconds` (depends on T031, T032, T042)
-- [ ] T051 [US1] `gsm-sip-bridge/src/main.rs` — wire CLI + config + runtime + logging + CardPool + SipBridge + metrics writer-thread; honour single-card override; log the v4.1.x-style startup summary; on graceful shutdown, hang up active calls and unregister SIP (depends on all the above)
-- [ ] T052 [P] [US1] `gsm-sip-bridge/src/bin/gsm_echo.rs` — debug bin: single-card GSM-only audio loopback (capture → playback through SPSC ring; no SIP)
-- [ ] T053 [P] [US1] `gsm-sip-bridge/src/bin/sip_echo.rs` — debug bin: single-card SIP-only audio loopback (PJSIP echo to the registered account; no GSM)
+- [x] T048 [US1] `gsm-sip-bridge/src/modules/card.rs` — `CardInstance` state machine: Idle → Ringing → Answering → Bridged → Cleanup; emits `gsm_sip_bridge_calls_total{status=incoming|answered|missed}` and `gsm_sip_bridge_active_calls{module}` (depends on T039, T040, T041, T042)
+- [x] T049 [US1] `gsm-sip-bridge/src/modules/mod.rs` — `CardPool`: detection at startup, dispatch RING events to the matching `CardInstance`, retry-thread for failed modules at the configured interval, emits `gsm_sip_bridge_module_init_total`, `_module_retries_total`, `_modules_active`, `_modules_failed` (depends on T038, T048)
+- [x] T050 [US1] `gsm-sip-bridge/src/sip/mod.rs` — `SipBridge`: owns the `Endpoint` + `Account`; on RING from a CardInstance, computes the SIP destination URI (DID passthrough vs fixed `[bridge].sip_destination`), starts a `Call`, watches for state changes, swaps the AudioMediaPort in/out at answer/teardown; emits `gsm_sip_bridge_sip_calls_total`, `_sip_registrations_total`, `_sip_registered`, `_call_duration_seconds` (depends on T031, T032, T042)
+- [x] T051 [US1] `gsm-sip-bridge/src/main.rs` — wire CLI + config + runtime + logging + CardPool + SipBridge + metrics writer-thread; honour single-card override; log the v4.1.x-style startup summary; on graceful shutdown, hang up active calls and unregister SIP (depends on all the above)
+- [x] T052 [P] [US1] `gsm-sip-bridge/src/bin/gsm_echo.rs` — debug bin: single-card GSM-only audio loopback (capture → playback through SPSC ring; no SIP)
+- [x] T053 [P] [US1] `gsm-sip-bridge/src/bin/sip_echo.rs` — debug bin: single-card SIP-only audio loopback (PJSIP echo to the registered account; no GSM)
 - [ ] T054 [P] [US1] Test: `gsm-sip-bridge/tests/test_card_pool.rs::failed_recovery` — module fails at init, succeeds on retry, joins active pool without process restart (US1 scenarios 5, 6)
 
 **Checkpoint**: With one or more EC20 modules attached (or PTY-backed in tests), the bridge auto-answers, dials SIP, bridges audio, handles multi-card. MVP delivered. Tests covering US1 scenarios 1–7 pass; scenario 8 (latency p95) is validated in Phase 8.
@@ -145,11 +145,11 @@ All paths below are relative to the repo root.
 
 ### Implementation for US2
 
-- [ ] T060 [P] [US2] `gsm-sip-bridge/src/sms/reader.rs` — listens for `+CMTI` URC on the AT commander; reads via `+CMGR`; decodes PDU mode; reassembles concatenated SMS; deletes via `+CMGD` AFTER persistence (FR-031 ordering)
-- [ ] T061 [P] [US2] `gsm-sip-bridge/src/sms/discord.rs` — `reqwest` client with `rustls-tls`; embed payload builder per `contracts/discord-webhook.md`; retry loop honouring `Retry-After`; total time budget 30 s; never logs the URL
-- [ ] T062 [US2] `gsm-sip-bridge/src/sms/mod.rs` — `SmsHandler`: per-module tokio task pulling SMS events from the AT commander; persists via the store writer thread (T022) before spawning an independent forward task; emits `gsm_sip_bridge_sms_received_total`, `_sms_forwarded_total{outcome}`, `_sms_db_writes_total{outcome}` (depends on T060, T061, T022, T023)
+- [x] T060 [P] [US2] `gsm-sip-bridge/src/sms/reader.rs` — listens for `+CMTI` URC on the AT commander; reads via `+CMGR`; decodes PDU mode; reassembles concatenated SMS; deletes via `+CMGD` AFTER persistence (FR-031 ordering)
+- [x] T061 [P] [US2] `gsm-sip-bridge/src/sms/discord.rs` — `reqwest` client with `rustls-tls`; embed payload builder per `contracts/discord-webhook.md`; retry loop honouring `Retry-After`; total time budget 30 s; never logs the URL
+- [x] T062 [US2] `gsm-sip-bridge/src/sms/mod.rs` — `SmsHandler`: per-module tokio task pulling SMS events from the AT commander; persists via the store writer thread (T022) before spawning an independent forward task; emits `gsm_sip_bridge_sms_received_total`, `_sms_forwarded_total{outcome}`, `_sms_db_writes_total{outcome}` (depends on T060, T061, T022, T023)
 - [ ] T063 [US2] Wire `SmsHandler` into `main.rs`: one handler instance receiving `module_id` + AT commander handle from each `CardInstance`; respects `[sms].enabled = false` (skip path) and empty `discord_webhook_url` (skipped status)
-- [ ] T064 [US2] Implement `gsm-sip-bridge/src/store/sms.rs::insert_sms` and `update_sms_forwarding` against the schema in `contracts/db.schema.sql`
+- [x] T064 [US2] Implement `gsm-sip-bridge/src/store/sms.rs::insert_sms` and `update_sms_forwarding` against the schema in `contracts/db.schema.sql`
 
 **Checkpoint**: SMS path works end-to-end. US1 (calls) is unaffected. Tests covering US2 scenarios 1–4 pass.
 
@@ -163,19 +163,19 @@ All paths below are relative to the repo root.
 
 ### Tests for US3
 
-- [ ] T065 [P] [US3] Test: `gsm-sip-bridge/tests/test_metrics_endpoint.rs` — start the bridge with a single PTY-backed module; complete one call; assert every metric from `contracts/metrics.md` appears in the `/metrics` body with the expected type (counter/gauge/histogram), and that `gsm_sip_bridge_build_info` carries non-empty version/git_sha/pjsip_version/rust_version labels
+- [x] T065 [P] [US3] Test: `gsm-sip-bridge/tests/test_metrics_endpoint.rs` — start the bridge with a single PTY-backed module; complete one call; assert every metric from `contracts/metrics.md` appears in the `/metrics` body with the expected type (counter/gauge/histogram), and that `gsm_sip_bridge_build_info` carries non-empty version/git_sha/pjsip_version/rust_version labels
 - [ ] T066 [P] [US3] Test: `gsm-sip-bridge/tests/test_metrics.rs::scrape_under_load` — 8 PTY-backed modules with active calls; spawn a tight scrape loop hitting `/metrics` every 10 ms for 30 s; assert no audio underruns reported in the audio_errors counter and every scrape returns within 1 s (validates FR-051 + SC-010 partially)
 - [ ] T067 [P] [US3] Test: `tests/test_metric_renames.rs` — load `contracts/metrics.md` and assert every v4.1.x metric in the rename table has a corresponding v5.0.0 metric registered in the running bridge
 
 ### Implementation for US3
 
-- [ ] T068 [P] [US3] `gsm-sip-bridge/src/metrics/server.rs` — `axum` server bound to `[metrics].port` (or `METRICS_PORT` env var if set); single route `GET /metrics` returning `prometheus::TextEncoder` output with `Content-Type: text/plain; version=0.0.4`
-- [ ] T069 [US3] Wire `metrics::server` into the runtime as a long-running tokio task launched from `main.rs`; bind error is fatal and produces exit code 1
+- [x] T068 [P] [US3] `gsm-sip-bridge/src/metrics/server.rs` — `axum` server bound to `[metrics].port` (or `METRICS_PORT` env var if set); single route `GET /metrics` returning `prometheus::TextEncoder` output with `Content-Type: text/plain; version=0.0.4`
+- [x] T069 [US3] Wire `metrics::server` into the runtime as a long-running tokio task launched from `main.rs`; bind error is fatal and produces exit code 1
 - [ ] T070 [P] [US3] Process collector: enable the `prometheus::process_collector::ProcessCollector` so `process_*` and runtime metrics are exposed (recorded in research.md "open items")
 - [ ] T071 [P] [US3] `docker/grafana/provisioning/dashboards/gsm-sip-bridge.json` — full dashboard JSON with panels for system overview, GSM and SIP call rates, active calls per module, call duration percentiles (p50/p95/p99), SIP registration timeline, module health and retry counts, audio and SIP error rates, SMS forwarding outcomes (FR-052)
-- [ ] T072 [P] [US3] `docker/grafana/provisioning/datasources/prometheus.yml` — Prometheus datasource provisioning pointing at `prometheus:9090`
-- [ ] T073 [P] [US3] `docker/grafana/provisioning/dashboards/dashboard.yml` — provisioning manifest pointing at the JSON file
-- [ ] T074 [P] [US3] `docker/prometheus.yml` — scrape config: 15 s interval, single target `gsm-sip-bridge:9091`
+- [x] T072 [P] [US3] `docker/grafana/provisioning/datasources/prometheus.yml` — Prometheus datasource provisioning pointing at `prometheus:9090`
+- [x] T073 [P] [US3] `docker/grafana/provisioning/dashboards/dashboard.yml` — provisioning manifest pointing at the JSON file
+- [x] T074 [P] [US3] `docker/prometheus.yml` — scrape config: 15 s interval, single target `gsm-sip-bridge:9091`
 
 **Checkpoint**: Metrics endpoint works under load; Grafana renders. Tests for US3 scenarios 1–3 pass.
 
@@ -189,16 +189,16 @@ All paths below are relative to the repo root.
 
 ### Tests for US4
 
-- [ ] T075 [P] [US4] Test: `gsm-sip-bridge/tests/test_store_calls.rs` — write `answered`/`missed`/`failed` call records via the writer thread; query each by status, by module_id, by started_at range; verify the `recent_calls` view returns newest-first
-- [ ] T076 [P] [US4] Test: `gsm-sip-bridge/tests/test_store_sms.rs` — insert pending SMS; transition to `sent` (with `discord_status_code=200`, non-null `forwarded_at`), `failed` (with `discord_status_code=503`), `skipped` (no Discord call); verify all three terminal states are persisted correctly
-- [ ] T077 [P] [US4] Test: `gsm-sip-bridge/tests/test_store_restart.rs` — write rows; close connection; reopen; assert all rows readable and the `meta(schema_version)` row is preserved
+- [x] T075 [P] [US4] Test: `gsm-sip-bridge/tests/test_store_calls.rs` — write `answered`/`missed`/`failed` call records via the writer thread; query each by status, by module_id, by started_at range; verify the `recent_calls` view returns newest-first
+- [x] T076 [P] [US4] Test: `gsm-sip-bridge/tests/test_store_sms.rs` — insert pending SMS; transition to `sent` (with `discord_status_code=200`, non-null `forwarded_at`), `failed` (with `discord_status_code=503`), `skipped` (no Discord call); verify all three terminal states are persisted correctly
+- [x] T077 [P] [US4] Test: `gsm-sip-bridge/tests/test_store_restart.rs` — write rows; close connection; reopen; assert all rows readable and the `meta(schema_version)` row is preserved
 - [ ] T078 [P] [US4] Test: `gsm-sip-bridge/tests/test_store_concurrent_writers.rs` — submit 1000 mixed call+sms writes concurrently from many tokio tasks; assert all 1000 land in the store with no `SQLITE_BUSY` errors (validates the single-writer-thread invariant)
 
 ### Implementation for US4
 
-- [ ] T079 [US4] Complete `gsm-sip-bridge/src/store/calls.rs::insert_call` (skeleton from T023) — full implementation including the index-friendly status enum encoding
-- [ ] T080 [P] [US4] `docker/docker-compose.yml` — add `sqlite-web` service exposing port 8088, mounted read-only on the bridge's `db_path` volume
-- [ ] T081 [P] [US4] `docs/operations.md` — operator-facing pages: how to query the store via `sqlite3` CLI; copy-pasteable manual prune SQL (FR-042); WAL/checkpoint guidance; backup recipe
+- [x] T079 [US4] Complete `gsm-sip-bridge/src/store/calls.rs::insert_call` (skeleton from T023) — full implementation including the index-friendly status enum encoding
+- [x] T080 [P] [US4] `docker/docker-compose.yml` — add `sqlite-web` service exposing port 8088, mounted read-only on the bridge's `db_path` volume
+- [x] T081 [P] [US4] `docs/operations.md` — operator-facing pages: how to query the store via `sqlite3` CLI; copy-pasteable manual prune SQL (FR-042); WAL/checkpoint guidance; backup recipe
 
 **Checkpoint**: Persistence and inspection work end-to-end. Tests for US4 scenarios 1–3 pass.
 
@@ -219,7 +219,7 @@ All paths below are relative to the repo root.
 
 ### Implementation for US5
 
-- [ ] T086 [US5] `docs/migrating-from-v4.1.x.md` — full guide with sections: Overview / Configuration mapping (INI→TOML side-by-side, `env:` reference syntax explained) / Database conversion (copy-pasteable SQL: CREATE new tables, INSERT…SELECT from old, INDEX, VACUUM) / Metrics rename mapping / CLI flag mapping / Docker Compose new file shown verbatim / Roll-back procedure (US5 acceptance scenarios 1, 2, 3)
+- [x] T086 [US5] `docs/migrating-from-v4.1.x.md` — full guide with sections: Overview / Configuration mapping (INI→TOML side-by-side, `env:` reference syntax explained) / Database conversion (copy-pasteable SQL: CREATE new tables, INSERT…SELECT from old, INDEX, VACUUM) / Metrics rename mapping / CLI flag mapping / Docker Compose new file shown verbatim / Roll-back procedure (US5 acceptance scenarios 1, 2, 3)
 
 **Checkpoint**: Migration guide is auditable and the SQL works against a v4.1.x fixture.
 
@@ -238,23 +238,23 @@ All paths below are relative to the repo root.
 
 ### `unsafe` audit
 
-- [ ] T091 [P] `tools/count-unsafe.sh` — script that counts `unsafe` blocks per crate (excluding generated `bindings.rs`); exits non-zero if `gsm-sip-bridge/src/**` contains any `unsafe`; reports the ratio for `pjsua-safe` against SC-009's 5% threshold
+- [x] T091 [P] `tools/count-unsafe.sh` — script that counts `unsafe` blocks per crate (excluding generated `bindings.rs`); exits non-zero if `gsm-sip-bridge/src/**` contains any `unsafe`; reports the ratio for `pjsua-safe` against SC-009's 5% threshold
 - [ ] T092 Wire `tools/count-unsafe.sh` into `make lint` so CI fails on regressions
 - [ ] T093 [P] `make coverage` integration: `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`; CI uploads to coverage service; threshold ≥90% lines (Constitution Principle I)
 - [ ] T094 [P] CI step: assert every `unsafe` block in `pjsua-safe/src/**` has a `// SAFETY:` comment on the same or preceding line (FR-080)
 
 ### Docker, deployment, and operator artefacts
 
-- [ ] T095 [P] `docker/Dockerfile` — multi-stage build: stage 1 builds PJSIP from a pinned source tarball; stage 2 builds the Rust workspace using the PJSIP build; stage 3 runtime image with just the binary, the Grafana JSON, the udev rule, and `libpjproject.so.2`
-- [ ] T096 [P] `docker/docker-compose.yml` — bridge + Prometheus + Grafana + sqlite-web, host network mode, `restart: unless-stopped`, volumes for `db_path` and config, `env_file:` for secrets
+- [x] T095 [P] `docker/Dockerfile` — multi-stage build: stage 1 builds PJSIP from a pinned source tarball; stage 2 builds the Rust workspace using the PJSIP build; stage 3 runtime image with just the binary, the Grafana JSON, the udev rule, and `libpjproject.so.2`
+- [x] T096 [P] `docker/docker-compose.yml` — bridge + Prometheus + Grafana + sqlite-web, host network mode, `restart: unless-stopped`, volumes for `db_path` and config, `env_file:` for secrets
 - [ ] T097 [P] `etc/99-ec20-gsm-sip-bridge.rules` — udev rule preserved from v4.1.x; verify still functional with the new binary name
-- [ ] T098 [P] `docs/configuration.md` — operator-facing reference cross-linking `contracts/config.toml.schema.md`; example `config.toml` for common deployment shapes (single-card, multi-card, TLS PBX, SMS-disabled, fixed extension vs DID passthrough)
+- [x] T098 [P] `docs/configuration.md` — operator-facing reference cross-linking `contracts/config.toml.schema.md`; example `config.toml` for common deployment shapes (single-card, multi-card, TLS PBX, SMS-disabled, fixed extension vs DID passthrough)
 
 ### Documentation finalisation
 
-- [ ] T099 [P] Final pass on `docs/operations.md` (started in T081): runbook entries for "module shows FAILED at startup", "SIP registration failing", "Discord forwarding failing", "metrics endpoint returns 5xx", "store.db corrupt"
+- [x] T099 [P] Final pass on `docs/operations.md` (started in T081): runbook entries for "module shows FAILED at startup", "SIP registration failing", "Discord forwarding failing", "metrics endpoint returns 5xx", "store.db corrupt"
 - [ ] T100 [P] `docs/baselines/v4.1.x.md` (from T087) committed and linked from quickstart.md
-- [ ] T101 Rewrite `README.md` for v5.0.0: prereqs (Rust toolchain), quick-start (clone → make build → make test → make run), 12-feature overview (matches v4.1.x README sections), Docker Compose section, configuration excerpt, links to specs/008-rust-rewrite/spec.md and migration guide. Supersedes the placeholder from T007
+- [x] T101 Rewrite `README.md` for v5.0.0: prereqs (Rust toolchain), quick-start (clone → make build → make test → make run), 12-feature overview (matches v4.1.x README sections), Docker Compose section, configuration excerpt, links to specs/008-rust-rewrite/spec.md and migration guide. Supersedes the placeholder from T007
 
 ### Quality gates
 
