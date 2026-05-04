@@ -3,8 +3,15 @@
 #include "bridge/metrics.h"
 #include "logger.h"
 
+#include <chrono>
+
 BridgeAccount::BridgeAccount() = default;
-BridgeAccount::~BridgeAccount() = default;
+
+BridgeAccount::~BridgeAccount() {
+    shutting_down_.store(true, std::memory_order_release);
+    retry_cv_.notify_all();
+    if (retry_thread_.joinable()) retry_thread_.join();
+}
 
 void BridgeAccount::onRegState(pj::OnRegStateParam& prm) {
     pj::AccountInfo ai = getInfo();
@@ -20,7 +27,41 @@ void BridgeAccount::onRegState(pj::OnRegStateParam& prm) {
         registered_.store(false, std::memory_order_release);
         metrics::sip_registration(false);
         metrics::sip_registered(false);
+        schedule_registration_retry();
     }
+}
+
+void BridgeAccount::schedule_registration_retry() {
+    if (shutting_down_.load(std::memory_order_acquire)) return;
+
+    std::lock_guard<std::mutex> lock(retry_mutex_);
+    if (retry_pending_) return;
+    retry_pending_ = true;
+
+    if (retry_thread_.joinable()) retry_thread_.join();
+
+    retry_thread_ = std::thread([this] {
+        LOG_INFO("SIP re-registration scheduled in %u seconds", REG_RETRY_DELAY_SEC);
+
+        std::unique_lock<std::mutex> lock(retry_mutex_);
+        bool cancelled = retry_cv_.wait_for(
+            lock,
+            std::chrono::seconds(REG_RETRY_DELAY_SEC),
+            [this] { return shutting_down_.load(std::memory_order_acquire); });
+
+        retry_pending_ = false;
+
+        if (cancelled) return;
+
+        if (registered_.load(std::memory_order_acquire)) return;
+
+        LOG_INFO("attempting SIP re-registration");
+        try {
+            setRegistration(true);
+        } catch (pj::Error& err) {
+            LOG_ERROR("SIP re-registration failed: %s", err.info().c_str());
+        }
+    });
 }
 
 void BridgeAccount::onIncomingCall(pj::OnIncomingCallParam& iprm) {
@@ -107,6 +148,10 @@ void BridgeAccount::remove_call(int call_id) {
 }
 
 void BridgeAccount::shutdown() {
+    shutting_down_.store(true, std::memory_order_release);
+    retry_cv_.notify_all();
+    if (retry_thread_.joinable()) retry_thread_.join();
+
     hangup_all_calls();
     {
         std::lock_guard<std::mutex> lock(calls_mutex_);

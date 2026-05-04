@@ -142,6 +142,47 @@ TEST_F(BridgeCallTest, make_outbound_call_without_caller_id_does_not_crash) {
     account.shutdown();
 }
 
+TEST_F(BridgeCallTest, account_schedules_retry_on_registration_failure) {
+    // Arrange
+    BridgeAccount account;
+    pj::AccountConfig cfg;
+    cfg.idUri = "sip:test@localhost";
+    account.create(cfg);
+
+    // Act — simulate registration failure callback
+    pj::OnRegStateParam prm;
+    prm.code = static_cast<pjsip_status_code>(403);
+    prm.reason = "Forbidden";
+    account.onRegState(prm);
+
+    // Assert — account should be unregistered and not crash
+    EXPECT_FALSE(account.is_registered());
+
+    // Cleanup — shutdown must cancel pending retry without hanging
+    account.shutdown();
+}
+
+TEST_F(BridgeCallTest, account_shutdown_cancels_pending_retry) {
+    // Arrange
+    BridgeAccount account;
+    pj::AccountConfig cfg;
+    cfg.idUri = "sip:test@localhost";
+    account.create(cfg);
+
+    pj::OnRegStateParam prm;
+    prm.code = static_cast<pjsip_status_code>(408);
+    prm.reason = "Request Timeout";
+    account.onRegState(prm);
+
+    // Act — shutdown should return promptly despite 5-min timer
+    auto start = std::chrono::steady_clock::now();
+    account.shutdown();
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    // Assert — shutdown completes in under 1 second (not 5 min)
+    EXPECT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 1);
+}
+
 TEST_F(BridgeCallTest, media_port_returns_data_from_capture_buffer) {
     // Arrange
     RingBuffer<int16_t> cap_buf(1600);
