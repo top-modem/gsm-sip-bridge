@@ -1,3 +1,30 @@
+# Rust
+target/
+*.rs.bk
+
+# Build artifacts (legacy C++)
 build/
+
+# Configuration with secrets
 config.ini
+config.toml
+.env
+
+# Logs
 *.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.tmp
+
+# Coverage
+lcov.info
+
+# Profiling
+*.prof*

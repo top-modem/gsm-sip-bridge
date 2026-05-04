@@ -8,6 +8,7 @@ on:
 
 env:
   PJSIP_VERSION: "2.16"
+  CARGO_TERM_COLOR: always
 
 jobs:
   build-and-test:
@@ -19,8 +20,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake pkg-config \
-            libasound2-dev libssl-dev wget
+            build-essential pkg-config clang libclang-dev \
+            libasound2-dev libssl-dev libusb-1.0-0-dev socat wget
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
 
       - name: Cache PJSIP build
         id: pjsip-cache
@@ -56,6 +72,4 @@ jobs:
         run: make test
 
       - name: Lint
-        run: |
-          sudo apt-get install -y --no-install-recommends cppcheck
-          make lint
+        run: make lint

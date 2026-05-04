@@ -1,39 +1,43 @@
-BUILD_DIR := build
-BRIDGE_BINARY := $(BUILD_DIR)/gsm-sip-bridge
-GSM_ECHO_BINARY := $(BUILD_DIR)/gsm-echo
-SIP_ECHO_BINARY := $(BUILD_DIR)/sip-echo
+CONFIG ?= config.toml
 
-.PHONY: build test run run-gsm-echo run-sip-echo docker clean lint help
+.PHONY: build test run clean lint format dev dev-gsm dev-sip docker-build coverage help
 
-build: ## Compile all binaries
-	@cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -S .
-	@cmake --build $(BUILD_DIR) --parallel
+build: ## Compile all binaries (release mode)
+	@cargo build --workspace --release
 
-test: ## Run the full integration test suite
-	@cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -S .
-	@cmake --build $(BUILD_DIR) --parallel
-	@cd $(BUILD_DIR) && ctest --output-on-failure
+test: ## Run the full test suite
+	@cargo test --workspace --all-features
 
 run: build ## Build and run the GSM-SIP bridge
-	@$(BRIDGE_BINARY) --config config.ini
-
-run-gsm-echo: build ## [Debug] Echo GSM audio back to caller (no SIP)
-	@$(GSM_ECHO_BINARY)
-
-run-sip-echo: build ## [Debug] Echo SIP audio back to caller (no GSM)
-	@$(SIP_ECHO_BINARY) --config config.ini --verbose
-
-docker: ## Build and run via Docker Compose
-	@docker compose up --build -d
-	@docker compose logs -f
+	@cargo run --release --bin gsm-sip-bridge -- --config $(CONFIG)
 
 clean: ## Remove all build artifacts
-	@rm -rf $(BUILD_DIR)
+	@cargo clean
 
-lint: ## Run static analysis on all source files
-	@cppcheck --enable=all --std=c++17 --suppress=missingIncludeSystem \
-		--error-exitcode=1 -I src src/ 2>&1 | grep -v "^Checking" || true
-	@echo "Lint complete."
+lint: ## Run formatting check, clippy, and cargo-deny
+	@cargo fmt --check
+	@cargo clippy --workspace -- -D warnings
+	@if command -v cargo-deny >/dev/null 2>&1; then cargo deny check; fi
+	@if [ -f tools/count-unsafe.sh ]; then bash tools/count-unsafe.sh; fi
+
+format: ## Auto-format all Rust source files
+	@cargo fmt
+
+dev: ## Run in debug mode with verbose logging
+	@RUST_LOG=debug,gsm_sip_bridge=trace cargo run --bin gsm-sip-bridge -- --config $(CONFIG) --verbose
+
+dev-gsm: ## [Debug] Run GSM-only audio loopback
+	@cargo run --bin gsm-echo
+
+dev-sip: ## [Debug] Run SIP-only audio loopback
+	@cargo run --bin sip-echo -- --config $(CONFIG) --verbose
+
+docker-build: ## Build the production Docker image
+	@docker compose -f docker/docker-compose.yml build
+
+coverage: ## Generate code coverage report
+	@cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+	@cargo llvm-cov report --workspace --all-features
 
 help: ## Show all available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
