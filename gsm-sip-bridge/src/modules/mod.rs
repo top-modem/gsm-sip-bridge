@@ -1,1 +1,5 @@
-// CardPool — full implementation in T049.
+pub mod at_commander;
+pub mod audio_pipeline;
+pub mod beep;
+pub mod card;
+pub mod discovery;
