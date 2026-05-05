@@ -53,7 +53,7 @@ fn test_call_make_stub_mode() {
     };
     let acc = Account::register(&ep, acc_config, None).unwrap();
 
-    let mut call = Call::make(&acc, "sip:100@127.0.0.1:5060", None).unwrap();
+    let mut call = Call::make(&acc, "sip:100@127.0.0.1:5060", None, &[]).unwrap();
     assert_eq!(call.state(), pjsua_safe::CallState::Calling);
 
     call.hangup().unwrap();
