@@ -9,7 +9,10 @@ fn test_beep_generates_sine_at_correct_frequency() {
     gen.fill_buffer(&mut buf);
 
     let non_zero: Vec<_> = buf.iter().filter(|&&s| s != 0).collect();
-    assert!(!non_zero.is_empty(), "buffer should contain non-zero samples");
+    assert!(
+        !non_zero.is_empty(),
+        "buffer should contain non-zero samples"
+    );
 
     let max_amplitude = buf.iter().map(|s| s.unsigned_abs()).max().unwrap();
     assert!(
@@ -27,7 +30,10 @@ fn test_beep_silence_when_stopped() {
     let mut buf = [0i16; 160];
     gen.fill_buffer(&mut buf);
 
-    assert!(buf.iter().all(|&s| s == 0), "all samples should be zero when stopped");
+    assert!(
+        buf.iter().all(|&s| s == 0),
+        "all samples should be zero when stopped"
+    );
 }
 
 #[test]

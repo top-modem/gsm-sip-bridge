@@ -91,7 +91,10 @@ username = "user"
     let result = load_config(f.path());
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
-    assert!(err.contains("password"), "error should mention password: {err}");
+    assert!(
+        err.contains("password"),
+        "error should mention password: {err}"
+    );
 }
 
 #[test]

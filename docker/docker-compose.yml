@@ -12,33 +12,55 @@ services:
       - .env
     devices:
       - /dev/bus/usb:/dev/bus/usb
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9091/metrics"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
   prometheus:
     image: prom/prometheus:latest
     network_mode: host
     restart: unless-stopped
+    depends_on:
+      gsm-sip-bridge:
+        condition: service_healthy
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
       - '--web.listen-address=:9090'
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   grafana:
     image: grafana/grafana:latest
     network_mode: host
     restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SERVER_HTTP_PORT=3000
 
   sqlite-web:
     image: coleifer/sqlite-web:latest
     network_mode: host
     restart: unless-stopped
+    depends_on:
+      gsm-sip-bridge:
+        condition: service_healthy
     volumes:
       - bridge-data:/data:ro
     command: ["sqlite_web", "--read-only", "--host", "0.0.0.0", "--port", "8088", "/data/store.db"]

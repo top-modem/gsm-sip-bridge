@@ -1,21 +1,25 @@
 mod common;
 
 use gsm_sip_bridge::config::{load_config, AppConfig};
-use gsm_sip_bridge::sip::SipBridge;
 use gsm_sip_bridge::sip::RegistrationState;
-use tempfile::NamedTempFile;
+use gsm_sip_bridge::sip::SipBridge;
 use std::io::Write;
+use tempfile::NamedTempFile;
 
 fn test_config() -> AppConfig {
     let mut f = NamedTempFile::new().unwrap();
-    writeln!(f, r#"
+    writeln!(
+        f,
+        r#"
 [sip]
 server = "127.0.0.1"
 port = 5060
 username = "test"
 password = "testpass"
 transport = "udp"
-"#).unwrap();
+"#
+    )
+    .unwrap();
 
     std::env::remove_var("METRICS_PORT");
     load_config(f.path()).unwrap()
@@ -56,7 +60,9 @@ fn test_compute_destination_uri_did_passthrough() {
 #[test]
 fn test_compute_destination_uri_fixed() {
     let mut f = NamedTempFile::new().unwrap();
-    writeln!(f, r#"
+    writeln!(
+        f,
+        r#"
 [sip]
 server = "pbx.local"
 port = 5060
@@ -65,7 +71,9 @@ password = "pass"
 
 [bridge]
 sip_destination = "100"
-"#).unwrap();
+"#
+    )
+    .unwrap();
 
     let config = load_config(f.path()).unwrap();
     let bridge = SipBridge::new(&config);

@@ -23,7 +23,7 @@ impl MediaPortHandle {
             // Full implementation would create a pjmedia_port with get_frame/put_frame callbacks
             // that delegate to the AudioMediaPort trait methods.
             return Err(PjsipError::MediaPort(
-                "full pjmedia_port registration requires runtime PJSIP".into()
+                "full pjmedia_port registration requires runtime PJSIP".into(),
             ));
         }
 

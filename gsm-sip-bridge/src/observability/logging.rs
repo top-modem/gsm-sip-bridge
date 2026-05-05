@@ -38,17 +38,13 @@ where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
 {
     fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
-        let mut visitor = RedactionVisitor { found_sensitive: false };
+        let mut visitor = RedactionVisitor {
+            found_sensitive: false,
+        };
         event.record(&mut visitor);
     }
 
-    fn on_new_span(
-        &self,
-        _attrs: &span::Attributes<'_>,
-        _id: &span::Id,
-        _ctx: Context<'_, S>,
-    ) {
-    }
+    fn on_new_span(&self, _attrs: &span::Attributes<'_>, _id: &span::Id, _ctx: Context<'_, S>) {}
 }
 
 struct RedactionVisitor {
@@ -73,6 +69,8 @@ impl Visit for RedactionVisitor {
 
 fn is_sensitive_field(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    REDACTED_FIELD_NAMES.iter().any(|&sensitive| lower.contains(sensitive))
+    REDACTED_FIELD_NAMES
+        .iter()
+        .any(|&sensitive| lower.contains(sensitive))
         || lower.starts_with("auth")
 }

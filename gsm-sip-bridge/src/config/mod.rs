@@ -7,7 +7,13 @@ use toml::Value;
 
 const TOP_LEVEL_SECTIONS: &[&str] = &["sip", "bridge", "sms", "metrics", "modules"];
 const SIP_KEYS: &[&str] = &[
-    "server", "port", "username", "password", "transport", "local_port", "display_name",
+    "server",
+    "port",
+    "username",
+    "password",
+    "transport",
+    "local_port",
+    "display_name",
     "tls_verify",
 ];
 const BRIDGE_KEYS: &[&str] = &["sip_destination", "sip_dial_timeout_sec"];
@@ -90,7 +96,13 @@ pub fn load_config(path: &Path) -> BridgeResult<AppConfig> {
     let metrics = parse_metrics(table)?;
     let modules = parse_modules(table)?;
 
-    Ok(AppConfig { sip, bridge, sms, metrics, modules })
+    Ok(AppConfig {
+        sip,
+        bridge,
+        sms,
+        metrics,
+        modules,
+    })
 }
 
 fn warn_unknown_keys_in(table: &toml::map::Map<String, Value>, allowed: &[&str], section: &str) {
@@ -111,7 +123,11 @@ fn resolve_env_reference(raw: &str, config_key: &str, is_secret: bool) -> Bridge
         match std::env::var(var_name) {
             Ok(value) if !value.is_empty() => Ok(value),
             _ => {
-                let label = if is_secret { "secret variable" } else { "environment variable" };
+                let label = if is_secret {
+                    "secret variable"
+                } else {
+                    "environment variable"
+                };
                 Err(BridgeError::Config(format!(
                     "{label} {var_name} is unset or empty (referenced from {config_key})"
                 )))
@@ -140,7 +156,9 @@ fn require_string(
         .ok_or_else(|| BridgeError::Config(format!("required field {key} is missing")))?;
     let s = as_string(v, key, secret)?;
     if s.is_empty() {
-        return Err(BridgeError::Config(format!("required field {key} is empty")));
+        return Err(BridgeError::Config(format!(
+            "required field {key} is empty"
+        )));
     }
     Ok(s)
 }
@@ -159,7 +177,9 @@ fn as_u64_range(
     let n = match v {
         Value::Integer(i) => {
             if *i < 0 {
-                return Err(BridgeError::Config(format!("field {key} must not be negative")));
+                return Err(BridgeError::Config(format!(
+                    "field {key} must not be negative"
+                )));
             }
             *i as u64
         }
@@ -173,7 +193,11 @@ fn as_u64_range(
                 ))
             })?
         }
-        _ => return Err(BridgeError::Config(format!("field {key} must be an integer"))),
+        _ => {
+            return Err(BridgeError::Config(format!(
+                "field {key} must be an integer"
+            )))
+        }
     };
     if !range.contains(&n) {
         return Err(BridgeError::Config(format!(
@@ -193,10 +217,14 @@ fn as_bool(v: &Value, key: &str) -> BridgeResult<bool> {
             match resolved.to_ascii_lowercase().as_str() {
                 "true" | "1" | "yes" => Ok(true),
                 "false" | "0" | "no" => Ok(false),
-                _ => Err(BridgeError::Config(format!("field {key} must be a boolean"))),
+                _ => Err(BridgeError::Config(format!(
+                    "field {key} must be a boolean"
+                ))),
             }
         }
-        _ => Err(BridgeError::Config(format!("field {key} must be a boolean"))),
+        _ => Err(BridgeError::Config(format!(
+            "field {key} must be a boolean"
+        ))),
     }
 }
 
@@ -213,15 +241,30 @@ fn parse_sip(root: &toml::map::Map<String, Value>) -> BridgeResult<SipConfig> {
     let username = require_string(sip, "username", "sip.username", false)?;
     let password = Secret::new(require_string(sip, "password", "sip.password", true)?);
 
-    let port = sip.get("port").map(|v| as_u16_port(v, "sip.port")).transpose()?.unwrap_or(5060);
-    let local_port = sip.get("local_port").map(|v| as_u16_port(v, "sip.local_port")).transpose()?.unwrap_or(5060);
+    let port = sip
+        .get("port")
+        .map(|v| as_u16_port(v, "sip.port"))
+        .transpose()?
+        .unwrap_or(5060);
+    let local_port = sip
+        .get("local_port")
+        .map(|v| as_u16_port(v, "sip.local_port"))
+        .transpose()?
+        .unwrap_or(5060);
 
     let transport = match sip.get("transport") {
-        Some(v) => match as_string(v, "sip.transport", false)?.to_ascii_lowercase().as_str() {
+        Some(v) => match as_string(v, "sip.transport", false)?
+            .to_ascii_lowercase()
+            .as_str()
+        {
             "udp" => SipTransport::Udp,
             "tcp" => SipTransport::Tcp,
             "tls" => SipTransport::Tls,
-            other => return Err(BridgeError::Config(format!("sip.transport must be udp, tcp, or tls; got {other}"))),
+            other => {
+                return Err(BridgeError::Config(format!(
+                    "sip.transport must be udp, tcp, or tls; got {other}"
+                )))
+            }
         },
         None => SipTransport::Udp,
     };
@@ -232,7 +275,11 @@ fn parse_sip(root: &toml::map::Map<String, Value>) -> BridgeResult<SipConfig> {
             let tv = match s.to_ascii_lowercase().as_str() {
                 "strict" => TlsVerify::Strict,
                 "skip" => TlsVerify::Skip,
-                other => return Err(BridgeError::Config(format!("sip.tls_verify must be strict or skip; got {other}"))),
+                other => {
+                    return Err(BridgeError::Config(format!(
+                        "sip.tls_verify must be strict or skip; got {other}"
+                    )))
+                }
             };
             (tv, true)
         }
@@ -246,25 +293,54 @@ fn parse_sip(root: &toml::map::Map<String, Value>) -> BridgeResult<SipConfig> {
     let display_name = match sip.get("display_name") {
         Some(v) => {
             let s = as_string(v, "sip.display_name", false)?;
-            if s.is_empty() { username.clone() } else { s }
+            if s.is_empty() {
+                username.clone()
+            } else {
+                s
+            }
         }
         None => username.clone(),
     };
 
-    Ok(SipConfig { server, port, username, password, transport, local_port, display_name, tls_verify })
+    Ok(SipConfig {
+        server,
+        port,
+        username,
+        password,
+        transport,
+        local_port,
+        display_name,
+        tls_verify,
+    })
 }
 
 fn parse_bridge(root: &toml::map::Map<String, Value>) -> BridgeResult<BridgeSection> {
     let Some(val) = root.get("bridge") else {
-        return Ok(BridgeSection { sip_destination: String::new(), sip_dial_timeout_sec: 30 });
+        return Ok(BridgeSection {
+            sip_destination: String::new(),
+            sip_dial_timeout_sec: 30,
+        });
     };
-    let t = val.as_table().ok_or_else(|| BridgeError::Config("[bridge] must be a table".into()))?;
+    let t = val
+        .as_table()
+        .ok_or_else(|| BridgeError::Config("[bridge] must be a table".into()))?;
     warn_unknown_keys_in(t, BRIDGE_KEYS, "bridge");
 
-    let sip_destination = t.get("sip_destination").map(|v| as_string(v, "bridge.sip_destination", false)).transpose()?.unwrap_or_default();
-    let sip_dial_timeout_sec = t.get("sip_dial_timeout_sec").map(|v| as_u64_range(v, "bridge.sip_dial_timeout_sec", false, 5..=120)).transpose()?.unwrap_or(30);
+    let sip_destination = t
+        .get("sip_destination")
+        .map(|v| as_string(v, "bridge.sip_destination", false))
+        .transpose()?
+        .unwrap_or_default();
+    let sip_dial_timeout_sec = t
+        .get("sip_dial_timeout_sec")
+        .map(|v| as_u64_range(v, "bridge.sip_dial_timeout_sec", false, 5..=120))
+        .transpose()?
+        .unwrap_or(30);
 
-    Ok(BridgeSection { sip_destination, sip_dial_timeout_sec })
+    Ok(BridgeSection {
+        sip_destination,
+        sip_dial_timeout_sec,
+    })
 }
 
 fn parse_sms(root: &toml::map::Map<String, Value>) -> BridgeResult<SmsConfig> {
@@ -275,10 +351,16 @@ fn parse_sms(root: &toml::map::Map<String, Value>) -> BridgeResult<SmsConfig> {
             db_path: DEFAULT_SMS_DB_PATH.into(),
         });
     };
-    let t = val.as_table().ok_or_else(|| BridgeError::Config("[sms] must be a table".into()))?;
+    let t = val
+        .as_table()
+        .ok_or_else(|| BridgeError::Config("[sms] must be a table".into()))?;
     warn_unknown_keys_in(t, SMS_KEYS, "sms");
 
-    let enabled = t.get("enabled").map(|v| as_bool(v, "sms.enabled")).transpose()?.unwrap_or(true);
+    let enabled = t
+        .get("enabled")
+        .map(|v| as_bool(v, "sms.enabled"))
+        .transpose()?
+        .unwrap_or(true);
     let discord_webhook_url = match t.get("discord_webhook_url") {
         Some(v) => Secret::new(as_string(v, "sms.discord_webhook_url", true)?),
         None => Secret::new(String::new()),
@@ -286,18 +368,28 @@ fn parse_sms(root: &toml::map::Map<String, Value>) -> BridgeResult<SmsConfig> {
     let db_path = match t.get("db_path") {
         Some(v) => {
             let s = as_string(v, "sms.db_path", false)?;
-            if s.is_empty() { DEFAULT_SMS_DB_PATH.into() } else { s }
+            if s.is_empty() {
+                DEFAULT_SMS_DB_PATH.into()
+            } else {
+                s
+            }
         }
         None => DEFAULT_SMS_DB_PATH.into(),
     };
 
-    Ok(SmsConfig { enabled, discord_webhook_url, db_path })
+    Ok(SmsConfig {
+        enabled,
+        discord_webhook_url,
+        db_path,
+    })
 }
 
 fn parse_metrics(root: &toml::map::Map<String, Value>) -> BridgeResult<MetricsConfig> {
     let mut port = 9091u16;
     if let Some(val) = root.get("metrics") {
-        let t = val.as_table().ok_or_else(|| BridgeError::Config("[metrics] must be a table".into()))?;
+        let t = val
+            .as_table()
+            .ok_or_else(|| BridgeError::Config("[metrics] must be a table".into()))?;
         warn_unknown_keys_in(t, METRICS_KEYS, "metrics");
         if let Some(v) = t.get("port") {
             port = as_u16_port(v, "metrics.port")?;
@@ -309,7 +401,9 @@ fn parse_metrics(root: &toml::map::Map<String, Value>) -> BridgeResult<MetricsCo
                 BridgeError::Config(format!("METRICS_PORT must be 1..=65535, got {s:?}"))
             })?;
             if port == 0 {
-                return Err(BridgeError::Config("METRICS_PORT must be in 1..=65535".into()));
+                return Err(BridgeError::Config(
+                    "METRICS_PORT must be in 1..=65535".into(),
+                ));
             }
         }
     }
@@ -318,13 +412,29 @@ fn parse_metrics(root: &toml::map::Map<String, Value>) -> BridgeResult<MetricsCo
 
 fn parse_modules(root: &toml::map::Map<String, Value>) -> BridgeResult<ModulesConfig> {
     let Some(val) = root.get("modules") else {
-        return Ok(ModulesConfig { retry_interval_sec: 30, max_concurrent: 8 });
+        return Ok(ModulesConfig {
+            retry_interval_sec: 30,
+            max_concurrent: 8,
+        });
     };
-    let t = val.as_table().ok_or_else(|| BridgeError::Config("[modules] must be a table".into()))?;
+    let t = val
+        .as_table()
+        .ok_or_else(|| BridgeError::Config("[modules] must be a table".into()))?;
     warn_unknown_keys_in(t, MODULES_KEYS, "modules");
 
-    let retry_interval_sec = t.get("retry_interval_sec").map(|v| as_u64_range(v, "modules.retry_interval_sec", false, 5..=600)).transpose()?.unwrap_or(30);
-    let max_concurrent = t.get("max_concurrent").map(|v| as_u64_range(v, "modules.max_concurrent", false, 1..=8)).transpose()?.unwrap_or(8) as u32;
+    let retry_interval_sec = t
+        .get("retry_interval_sec")
+        .map(|v| as_u64_range(v, "modules.retry_interval_sec", false, 5..=600))
+        .transpose()?
+        .unwrap_or(30);
+    let max_concurrent = t
+        .get("max_concurrent")
+        .map(|v| as_u64_range(v, "modules.max_concurrent", false, 1..=8))
+        .transpose()?
+        .unwrap_or(8) as u32;
 
-    Ok(ModulesConfig { retry_interval_sec, max_concurrent })
+    Ok(ModulesConfig {
+        retry_interval_sec,
+        max_concurrent,
+    })
 }

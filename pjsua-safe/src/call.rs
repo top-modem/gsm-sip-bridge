@@ -36,9 +36,8 @@ impl Call {
             use std::ffi::CString;
 
             unsafe {
-                let uri_cstr = CString::new(dest_uri).map_err(|_| {
-                    PjsipError::CallMake("invalid destination URI".into())
-                })?;
+                let uri_cstr = CString::new(dest_uri)
+                    .map_err(|_| PjsipError::CallMake("invalid destination URI".into()))?;
                 let uri = pjsua_sys::pj_str(uri_cstr.as_ptr() as *mut i8);
 
                 let mut call_id: pjsua_sys::pjsua_call_id = -1;
@@ -78,7 +77,12 @@ impl Call {
         {
             // SAFETY: call_id is valid for the lifetime of this Call object
             unsafe {
-                let status = pjsua_sys::pjsua_call_hangup(self.call_id, 200, std::ptr::null(), std::ptr::null());
+                let status = pjsua_sys::pjsua_call_hangup(
+                    self.call_id,
+                    200,
+                    std::ptr::null(),
+                    std::ptr::null(),
+                );
                 if status != crate::error::PJ_SUCCESS {
                     return Err(PjsipError::CallHangup(format!(
                         "pjsua_call_hangup returned {status}"
@@ -98,7 +102,8 @@ impl Call {
             if self.state == CallState::Confirmed {
                 unsafe {
                     let info = std::mem::zeroed::<pjsua_sys::pjsua_call_info>();
-                    let status = pjsua_sys::pjsua_call_get_info(self.call_id, &info as *const _ as *mut _);
+                    let status =
+                        pjsua_sys::pjsua_call_get_info(self.call_id, &info as *const _ as *mut _);
                     if status == crate::error::PJ_SUCCESS {
                         return Some(info.conf_slot as SlotId);
                     }

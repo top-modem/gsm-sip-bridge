@@ -12,9 +12,9 @@ pub fn read_sms(at: &mut AtCommander, index: u32) -> BridgeResult<IncomingSms> {
     let cmd = format!("AT+CMGR={index}");
     match at.send_command(&cmd)? {
         AtResponse::Ok(lines) => parse_cmgr_response(&lines, index),
-        AtResponse::Error(e) | AtResponse::CmeError(_, e) => {
-            Err(BridgeError::Sms(format!("CMGR failed for index {index}: {e}")))
-        }
+        AtResponse::Error(e) | AtResponse::CmeError(_, e) => Err(BridgeError::Sms(format!(
+            "CMGR failed for index {index}: {e}"
+        ))),
     }
 }
 
@@ -22,9 +22,9 @@ pub fn delete_sms(at: &mut AtCommander, index: u32) -> BridgeResult<()> {
     let cmd = format!("AT+CMGD={index}");
     match at.send_command(&cmd)? {
         AtResponse::Ok(_) => Ok(()),
-        AtResponse::Error(e) | AtResponse::CmeError(_, e) => {
-            Err(BridgeError::Sms(format!("CMGD failed for index {index}: {e}")))
-        }
+        AtResponse::Error(e) | AtResponse::CmeError(_, e) => Err(BridgeError::Sms(format!(
+            "CMGD failed for index {index}: {e}"
+        ))),
     }
 }
 
@@ -51,5 +51,9 @@ fn parse_cmgr_response(lines: &[String], index: u32) -> BridgeResult<IncomingSms
         )));
     }
 
-    Ok(IncomingSms { sender, body, index })
+    Ok(IncomingSms {
+        sender,
+        body,
+        index,
+    })
 }

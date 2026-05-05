@@ -1,7 +1,9 @@
 mod common;
 
 use gsm_sip_bridge::store::schema::init_schema;
-use gsm_sip_bridge::store::sms::{insert_sms, update_sms_forwarding, SmsForwardingUpdate, SmsRecord};
+use gsm_sip_bridge::store::sms::{
+    insert_sms, update_sms_forwarding, SmsForwardingUpdate, SmsRecord,
+};
 use rusqlite::Connection;
 
 fn mem_db() -> Connection {
@@ -41,7 +43,11 @@ fn test_sms_full_path_persist_then_forward() {
     update_sms_forwarding(&conn, &update).unwrap();
 
     let final_status: String = conn
-        .query_row("SELECT forwarding_status FROM sms WHERE id = ?1", [id], |r| r.get(0))
+        .query_row(
+            "SELECT forwarding_status FROM sms WHERE id = ?1",
+            [id],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(final_status, "sent");
 }

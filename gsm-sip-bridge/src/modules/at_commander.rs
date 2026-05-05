@@ -35,12 +35,11 @@ impl AtCommander {
             .timeout(DEFAULT_TIMEOUT)
             .open()
             .map_err(|e| {
-                BridgeError::Discovery(format!(
-                    "failed to open serial {}: {e}",
-                    path.display()
-                ))
+                BridgeError::Discovery(format!("failed to open serial {}: {e}", path.display()))
             })?;
-        Ok(Self { port: Box::new(port) })
+        Ok(Self {
+            port: Box::new(port),
+        })
     }
 
     pub fn from_stream<S: Read + Write + Send + 'static>(stream: S, _timeout: Duration) -> Self {

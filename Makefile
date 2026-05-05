@@ -1,12 +1,15 @@
 CONFIG ?= config.toml
+DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
 
-.PHONY: build test run clean lint format dev dev-gsm dev-sip docker-build coverage help
+.PHONY: build test run clean lint format dev dev-gsm dev-sip \
+        docker-build docker-up docker-down docker-logs \
+        coverage help
 
 build: ## Compile all binaries (release mode)
 	@cargo build --workspace --release
 
 test: ## Run the full test suite
-	@cargo test --workspace --all-features
+	@cargo test --workspace
 
 run: build ## Build and run the GSM-SIP bridge
 	@cargo run --release --bin gsm-sip-bridge -- --config $(CONFIG)
@@ -14,11 +17,11 @@ run: build ## Build and run the GSM-SIP bridge
 clean: ## Remove all build artifacts
 	@cargo clean
 
-lint: ## Run formatting check, clippy, and cargo-deny
+lint: ## Run formatting check, clippy, cargo-deny, and unsafe audit
 	@cargo fmt --check
-	@cargo clippy --workspace -- -D warnings
+	@cargo clippy -p gsm-sip-bridge -p pjsua-safe -- -D warnings
 	@if command -v cargo-deny >/dev/null 2>&1; then cargo deny check; fi
-	@if [ -f tools/count-unsafe.sh ]; then bash tools/count-unsafe.sh; fi
+	@bash tools/count-unsafe.sh
 
 format: ## Auto-format all Rust source files
 	@cargo fmt
@@ -33,11 +36,20 @@ dev-sip: ## [Debug] Run SIP-only audio loopback
 	@cargo run --bin sip-echo -- --config $(CONFIG) --verbose
 
 docker-build: ## Build the production Docker image
-	@docker compose -f docker/docker-compose.yml build
+	@$(DOCKER_COMPOSE) build
 
-coverage: ## Generate code coverage report
-	@cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
-	@cargo llvm-cov report --workspace --all-features
+docker-up: ## Start all containers (bridge + monitoring stack)
+	@$(DOCKER_COMPOSE) up -d
+
+docker-down: ## Stop and remove all containers
+	@$(DOCKER_COMPOSE) down
+
+docker-logs: ## Tail logs from all containers
+	@$(DOCKER_COMPOSE) logs -f
+
+coverage: ## Generate code coverage report (requires cargo-llvm-cov)
+	@cargo llvm-cov --workspace --lcov --output-path lcov.info
+	@cargo llvm-cov report --workspace
 
 help: ## Show all available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \

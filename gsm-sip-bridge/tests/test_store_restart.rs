@@ -33,7 +33,11 @@ fn test_store_survives_restart() {
         assert_eq!(count, 1);
 
         let schema_version: String = conn
-            .query_row("SELECT value FROM meta WHERE key = 'schema_version'", [], |r| r.get(0))
+            .query_row(
+                "SELECT value FROM meta WHERE key = 'schema_version'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(schema_version, "1");
     }

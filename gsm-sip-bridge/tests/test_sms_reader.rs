@@ -1,7 +1,7 @@
 mod common;
 
 use gsm_sip_bridge::modules::at_commander::{AtCommander, AtResponse};
-use gsm_sip_bridge::sms::reader::{read_sms, delete_sms};
+use gsm_sip_bridge::sms::reader::{delete_sms, read_sms};
 use std::io::{Read, Write};
 use std::time::Duration;
 

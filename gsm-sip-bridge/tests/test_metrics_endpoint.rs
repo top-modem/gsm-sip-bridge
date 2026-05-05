@@ -7,22 +7,44 @@ static INIT: Once = Once::new();
 
 fn init_all_metrics() {
     INIT.call_once(|| {});
-    metrics::CALLS_TOTAL.with_label_values(&["test", "answered"]).inc();
-    metrics::SIP_CALLS_TOTAL.with_label_values(&["test", "success"]).inc();
-    metrics::CALL_DURATION_SECONDS.with_label_values(&["test"]).observe(1.0);
+    metrics::CALLS_TOTAL
+        .with_label_values(&["test", "answered"])
+        .inc();
+    metrics::SIP_CALLS_TOTAL
+        .with_label_values(&["test", "success"])
+        .inc();
+    metrics::CALL_DURATION_SECONDS
+        .with_label_values(&["test"])
+        .observe(1.0);
     metrics::ACTIVE_CALLS.with_label_values(&["test"]).set(0.0);
-    metrics::SIP_REGISTRATIONS_TOTAL.with_label_values(&["success"]).inc();
+    metrics::SIP_REGISTRATIONS_TOTAL
+        .with_label_values(&["success"])
+        .inc();
     metrics::SIP_REGISTERED.set(0.0);
-    metrics::MODULE_INIT_TOTAL.with_label_values(&["test", "success", "none"]).inc();
-    metrics::MODULE_RETRIES_TOTAL.with_label_values(&["test"]).inc();
+    metrics::MODULE_INIT_TOTAL
+        .with_label_values(&["test", "success", "none"])
+        .inc();
+    metrics::MODULE_RETRIES_TOTAL
+        .with_label_values(&["test"])
+        .inc();
     metrics::MODULES_ACTIVE.set(0.0);
     metrics::MODULES_FAILED.set(0.0);
-    metrics::AUDIO_ERRORS_TOTAL.with_label_values(&["test", "underrun"]).inc();
-    metrics::SMS_RECEIVED_TOTAL.with_label_values(&["test"]).inc();
-    metrics::SMS_FORWARDED_TOTAL.with_label_values(&["test", "sent"]).inc();
-    metrics::SMS_DB_WRITES_TOTAL.with_label_values(&["success"]).inc();
+    metrics::AUDIO_ERRORS_TOTAL
+        .with_label_values(&["test", "underrun"])
+        .inc();
+    metrics::SMS_RECEIVED_TOTAL
+        .with_label_values(&["test"])
+        .inc();
+    metrics::SMS_FORWARDED_TOTAL
+        .with_label_values(&["test", "sent"])
+        .inc();
+    metrics::SMS_DB_WRITES_TOTAL
+        .with_label_values(&["success"])
+        .inc();
     metrics::UPTIME_SECONDS.set(1.0);
-    metrics::BUILD_INFO.with_label_values(&["5.0.0", "test", "2.16", "1.80.0"]).set(1.0);
+    metrics::BUILD_INFO
+        .with_label_values(&["5.0.0", "test", "2.16", "1.80.0"])
+        .set(1.0);
 }
 
 #[test]

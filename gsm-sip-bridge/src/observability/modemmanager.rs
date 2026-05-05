@@ -10,12 +10,12 @@ pub fn check_modemmanager() {
 
     let dbus_present = std::path::Path::new("/run/dbus/system_bus_socket").exists();
 
-    if active == "active" || dbus_present {
-        if active == "active" {
-            tracing::warn!(
-                "ModemManager is active and may interfere with EC20 serial ports. \
-                 Disable it with: systemctl disable --now ModemManager"
-            );
-        }
+    if active == "active" {
+        tracing::warn!(
+            "ModemManager is active and may interfere with EC20 serial ports. \
+             Disable it with: systemctl disable --now ModemManager"
+        );
+    } else if dbus_present {
+        tracing::debug!("D-Bus socket present but ModemManager is not active");
     }
 }

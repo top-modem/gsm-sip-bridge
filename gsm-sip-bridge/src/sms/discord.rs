@@ -20,7 +20,10 @@ impl DiscordClient {
             .build()
             .map_err(|e| BridgeError::Sms(format!("failed to build HTTP client: {e}")))?;
 
-        Ok(Self { client, webhook_url })
+        Ok(Self {
+            client,
+            webhook_url,
+        })
     }
 
     pub async fn forward_sms(
@@ -104,6 +107,8 @@ impl DiscordClient {
             }
         }
 
-        Err(format!("failed after {MAX_RETRIES} retries, last status: {last_status}"))
+        Err(format!(
+            "failed after {MAX_RETRIES} retries, last status: {last_status}"
+        ))
     }
 }

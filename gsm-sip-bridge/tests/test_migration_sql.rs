@@ -95,7 +95,11 @@ fn test_migration_preserves_all_rows() {
     assert_eq!(count, 3);
 
     let schema_version: String = conn
-        .query_row("SELECT value FROM meta WHERE key = 'schema_version'", [], |r| r.get(0))
+        .query_row(
+            "SELECT value FROM meta WHERE key = 'schema_version'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(schema_version, "1");
 }
@@ -201,5 +205,8 @@ fn test_migration_nondestructive_to_source() {
     );
 
     let after_content = std::fs::read(legacy.path()).unwrap();
-    assert_eq!(original_content, after_content, "source DB was modified during migration");
+    assert_eq!(
+        original_content, after_content,
+        "source DB was modified during migration"
+    );
 }

@@ -18,7 +18,10 @@ pub static CALLS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
 
 pub static SIP_CALLS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
     register_counter_vec!(
-        opts!("gsm_sip_bridge_sip_calls_total", "Outbound SIP calls per module"),
+        opts!(
+            "gsm_sip_bridge_sip_calls_total",
+            "Outbound SIP calls per module"
+        ),
         &["module", "status"]
     )
     .unwrap()
@@ -36,7 +39,10 @@ pub static CALL_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
 
 pub static ACTIVE_CALLS: Lazy<GaugeVec> = Lazy::new(|| {
     register_gauge_vec!(
-        opts!("gsm_sip_bridge_active_calls", "Currently active calls per module"),
+        opts!(
+            "gsm_sip_bridge_active_calls",
+            "Currently active calls per module"
+        ),
         &["module"]
     )
     .unwrap()
@@ -44,7 +50,10 @@ pub static ACTIVE_CALLS: Lazy<GaugeVec> = Lazy::new(|| {
 
 pub static SIP_REGISTRATIONS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
     register_counter_vec!(
-        opts!("gsm_sip_bridge_sip_registrations_total", "SIP registration outcomes"),
+        opts!(
+            "gsm_sip_bridge_sip_registrations_total",
+            "SIP registration outcomes"
+        ),
         &["status"]
     )
     .unwrap()
@@ -68,7 +77,10 @@ pub static MODULE_INIT_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
 
 pub static MODULE_RETRIES_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
     register_counter_vec!(
-        opts!("gsm_sip_bridge_module_retries_total", "Module retry attempts"),
+        opts!(
+            "gsm_sip_bridge_module_retries_total",
+            "Module retry attempts"
+        ),
         &["module"]
     )
     .unwrap()
@@ -92,7 +104,10 @@ pub static MODULES_FAILED: Lazy<Gauge> = Lazy::new(|| {
 
 pub static AUDIO_ERRORS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
     register_counter_vec!(
-        opts!("gsm_sip_bridge_audio_errors_total", "Audio errors per module"),
+        opts!(
+            "gsm_sip_bridge_audio_errors_total",
+            "Audio errors per module"
+        ),
         &["module", "kind"]
     )
     .unwrap()
@@ -100,7 +115,10 @@ pub static AUDIO_ERRORS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
 
 pub static SMS_RECEIVED_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
     register_counter_vec!(
-        opts!("gsm_sip_bridge_sms_received_total", "SMS messages read from SIM"),
+        opts!(
+            "gsm_sip_bridge_sms_received_total",
+            "SMS messages read from SIM"
+        ),
         &["module"]
     )
     .unwrap()
@@ -108,7 +126,10 @@ pub static SMS_RECEIVED_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
 
 pub static SMS_FORWARDED_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
     register_counter_vec!(
-        opts!("gsm_sip_bridge_sms_forwarded_total", "Discord forwarding outcomes"),
+        opts!(
+            "gsm_sip_bridge_sms_forwarded_total",
+            "Discord forwarding outcomes"
+        ),
         &["module", "outcome"]
     )
     .unwrap()
@@ -116,7 +137,10 @@ pub static SMS_FORWARDED_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
 
 pub static SMS_DB_WRITES_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
     register_counter_vec!(
-        opts!("gsm_sip_bridge_sms_db_writes_total", "SMS row write attempts"),
+        opts!(
+            "gsm_sip_bridge_sms_db_writes_total",
+            "SMS row write attempts"
+        ),
         &["outcome"]
     )
     .unwrap()
@@ -124,7 +148,10 @@ pub static SMS_DB_WRITES_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
 
 pub static STORE_WRITES_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
     register_counter_vec!(
-        opts!("gsm_sip_bridge_store_writes_total", "All writes to the store"),
+        opts!(
+            "gsm_sip_bridge_store_writes_total",
+            "All writes to the store"
+        ),
         &["table", "outcome"]
     )
     .unwrap()

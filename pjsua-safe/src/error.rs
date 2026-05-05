@@ -20,15 +20,15 @@ impl PjsipError {
         if status == PJ_SUCCESS {
             return PjsipError::Status(status);
         }
-        PjsipError::Status(status)
-            .with_context(context)
+        PjsipError::Status(status).with_context(context)
     }
 
     fn with_context(self, context: &str) -> Self {
         match self {
-            PjsipError::Status(s) => {
-                PjsipError::InitFailed(format!("{context}: pj_status={s} ({})", pj_status_to_str(s)))
-            }
+            PjsipError::Status(s) => PjsipError::InitFailed(format!(
+                "{context}: pj_status={s} ({})",
+                pj_status_to_str(s)
+            )),
             other => other,
         }
     }

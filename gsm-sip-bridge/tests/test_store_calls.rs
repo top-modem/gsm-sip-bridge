@@ -24,7 +24,11 @@ fn test_insert_and_query_answered_call() {
     insert_call(&conn, &record).unwrap();
 
     let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM calls WHERE status = 'answered'", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM calls WHERE status = 'answered'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(count, 1);
 }
@@ -43,7 +47,11 @@ fn test_insert_missed_call() {
     insert_call(&conn, &record).unwrap();
 
     let status: String = conn
-        .query_row("SELECT status FROM calls WHERE module_id = 'ec20-D4E5F6'", [], |r| r.get(0))
+        .query_row(
+            "SELECT status FROM calls WHERE module_id = 'ec20-D4E5F6'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(status, "missed");
 }
@@ -62,7 +70,11 @@ fn test_insert_failed_call() {
     insert_call(&conn, &record).unwrap();
 
     let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM calls WHERE status = 'failed'", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM calls WHERE status = 'failed'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(count, 1);
 }
@@ -83,7 +95,9 @@ fn test_recent_calls_view_newest_first() {
     }
 
     let first_caller: String = conn
-        .query_row("SELECT caller_id FROM recent_calls LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT caller_id FROM recent_calls LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(first_caller, "+15550000004");
 }

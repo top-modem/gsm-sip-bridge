@@ -1,7 +1,9 @@
 mod common;
 
 use gsm_sip_bridge::store::schema::init_schema;
-use gsm_sip_bridge::store::sms::{insert_sms, update_sms_forwarding, SmsForwardingUpdate, SmsRecord};
+use gsm_sip_bridge::store::sms::{
+    insert_sms, update_sms_forwarding, SmsForwardingUpdate, SmsRecord,
+};
 use rusqlite::Connection;
 
 fn mem_db() -> Connection {
@@ -23,7 +25,11 @@ fn test_insert_sms_pending() {
     insert_sms(&conn, &record).unwrap();
 
     let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM sms WHERE forwarding_status = 'pending'", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM sms WHERE forwarding_status = 'pending'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(count, 1);
 }
@@ -41,7 +47,11 @@ fn test_update_forwarding_to_sent() {
     insert_sms(&conn, &record).unwrap();
 
     let sms_id: i64 = conn
-        .query_row("SELECT id FROM sms WHERE sender = '+15551234567'", [], |r| r.get(0))
+        .query_row(
+            "SELECT id FROM sms WHERE sender = '+15551234567'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
 
     let update = SmsForwardingUpdate {
@@ -53,7 +63,11 @@ fn test_update_forwarding_to_sent() {
     update_sms_forwarding(&conn, &update).unwrap();
 
     let status: String = conn
-        .query_row("SELECT forwarding_status FROM sms WHERE id = ?1", [sms_id], |r| r.get(0))
+        .query_row(
+            "SELECT forwarding_status FROM sms WHERE id = ?1",
+            [sms_id],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(status, "sent");
 }

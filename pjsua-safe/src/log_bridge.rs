@@ -2,7 +2,6 @@
 ///
 /// When PJSIP is compiled in, this installs a log callback that routes all
 /// PJSIP log lines to `tracing` under the `sip` target.
-
 pub fn install_log_bridge() {
     // SAFETY: pjsua_logging_config_default + setting the callback is safe
     // as long as pjsua_create has been called first. The caller (Endpoint::create)

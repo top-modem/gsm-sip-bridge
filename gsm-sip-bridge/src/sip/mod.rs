@@ -16,6 +16,7 @@ pub struct SipBridge {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 struct SipBridgeConfig {
     server: String,
     port: u16,
