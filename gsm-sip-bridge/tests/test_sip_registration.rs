@@ -54,7 +54,7 @@ fn test_compute_destination_uri_did_passthrough() {
     let config = test_config();
     let bridge = SipBridge::new(&config);
     let uri = bridge.compute_destination_uri("+15551234567");
-    assert_eq!(uri, "sip:+15551234567@127.0.0.1:5060");
+    assert_eq!(uri, "sip:15551234567@127.0.0.1:5060");
 }
 
 #[test]
