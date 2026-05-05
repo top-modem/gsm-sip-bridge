@@ -391,7 +391,8 @@ unsafe fn start_ringback_tone() { // SAFETY: Called only from PJSIP call-state c
         flags: 0,
     };
 
-    let status = pjsua_sys::pjmedia_tonegen_play(port, 1, &mut tone, 0);
+    const PJMEDIA_TONEGEN_LOOP: u32 = 1;
+    let status = pjsua_sys::pjmedia_tonegen_play(port, 1, &mut tone, PJMEDIA_TONEGEN_LOOP);
     if status != PJ_SUCCESS {
         return;
     }
