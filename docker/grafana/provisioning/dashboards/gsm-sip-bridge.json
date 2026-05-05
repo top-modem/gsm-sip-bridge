@@ -1,0 +1,114 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "System Overview",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "gsm_sip_bridge_modules_active", "legendFormat": "Active Modules" }]
+    },
+    {
+      "title": "Active Calls",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "expr": "sum(gsm_sip_bridge_active_calls)", "legendFormat": "Calls" }]
+    },
+    {
+      "title": "SIP Registered",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [{ "expr": "gsm_sip_bridge_sip_registered", "legendFormat": "Registered" }]
+    },
+    {
+      "title": "Uptime",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [{ "expr": "gsm_sip_bridge_uptime_seconds", "legendFormat": "Seconds" }]
+    },
+    {
+      "title": "GSM Call Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [{ "expr": "rate(gsm_sip_bridge_calls_total[5m])", "legendFormat": "{{module}} {{status}}" }]
+    },
+    {
+      "title": "SIP Call Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [{ "expr": "rate(gsm_sip_bridge_sip_calls_total[5m])", "legendFormat": "{{module}} {{status}}" }]
+    },
+    {
+      "title": "Call Duration (p50/p95/p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, rate(gsm_sip_bridge_call_duration_seconds_bucket[5m]))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, rate(gsm_sip_bridge_call_duration_seconds_bucket[5m]))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, rate(gsm_sip_bridge_call_duration_seconds_bucket[5m]))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "title": "Active Calls per Module",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [{ "expr": "gsm_sip_bridge_active_calls", "legendFormat": "{{module}}" }]
+    },
+    {
+      "title": "Module Health",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        { "expr": "gsm_sip_bridge_modules_active", "legendFormat": "Active" },
+        { "expr": "gsm_sip_bridge_modules_failed", "legendFormat": "Failed" }
+      ]
+    },
+    {
+      "title": "Module Retries",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [{ "expr": "rate(gsm_sip_bridge_module_retries_total[5m])", "legendFormat": "{{module}}" }]
+    },
+    {
+      "title": "Audio & SIP Errors",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "targets": [
+        { "expr": "rate(gsm_sip_bridge_audio_errors_total[5m])", "legendFormat": "audio {{module}} {{kind}}" },
+        { "expr": "rate(gsm_sip_bridge_sip_registrations_total{status!=\"success\"}[5m])", "legendFormat": "sip reg failure" }
+      ]
+    },
+    {
+      "title": "SMS Forwarding",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "targets": [
+        { "expr": "rate(gsm_sip_bridge_sms_received_total[5m])", "legendFormat": "received {{module}}" },
+        { "expr": "rate(gsm_sip_bridge_sms_forwarded_total[5m])", "legendFormat": "forwarded {{outcome}}" }
+      ]
+    },
+    {
+      "title": "SIP Registration Timeline",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 36 },
+      "targets": [
+        { "expr": "gsm_sip_bridge_sip_registered", "legendFormat": "registered" },
+        { "expr": "rate(gsm_sip_bridge_sip_registrations_total[5m])", "legendFormat": "reg attempts {{status}}" }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["gsm-sip-bridge"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "GSM-SIP Bridge",
+  "uid": "gsm-sip-bridge-v5",
+  "version": 1
+}

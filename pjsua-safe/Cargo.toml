@@ -1,0 +1,12 @@
+[package]
+name = "pjsua-safe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+pjsip-linked = []
+
+[dependencies]
+pjsua-sys = { path = "../pjsua-sys" }
+tracing = "0.1"
