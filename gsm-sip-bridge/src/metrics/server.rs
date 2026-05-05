@@ -1,8 +1,19 @@
 use axum::{http::StatusCode, response::IntoResponse, routing::get, Router};
 use prometheus::TextEncoder;
 use std::net::SocketAddr;
+use std::time::Instant;
+
+static START_TIME: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+pub fn record_start_time() {
+    START_TIME.get_or_init(Instant::now);
+}
 
 async fn metrics_handler() -> impl IntoResponse {
+    if let Some(start) = START_TIME.get() {
+        super::UPTIME_SECONDS.set(start.elapsed().as_secs_f64());
+    }
+
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
 

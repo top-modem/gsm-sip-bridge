@@ -29,6 +29,7 @@ fn main() -> ExitCode {
 
     modemmanager::check_modemmanager();
     metrics::register_build_info();
+    metrics::server::record_start_time();
 
     let rt = match runtime::build_runtime() {
         Ok(r) => r,
