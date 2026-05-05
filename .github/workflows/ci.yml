@@ -73,3 +73,15 @@ jobs:
 
       - name: Lint
         run: make lint
+
+      - name: Check unsafe blocks have SAFETY comments
+        run: |
+          violations=$(grep -rn "unsafe" pjsua-safe/src/ 2>/dev/null | grep -v "//.*unsafe" | grep -v "SAFETY" || true)
+          if [ -n "$violations" ]; then
+            echo "ERROR: unsafe blocks without // SAFETY: comment:"
+            echo "$violations"
+            exit 1
+          fi
+
+      - name: Unsafe audit
+        run: bash tools/count-unsafe.sh

@@ -1,5 +1,5 @@
 use crate::error::{BridgeError, BridgeResult};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
 use std::time::Duration;
 
@@ -7,8 +7,11 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 const BAUD_RATE: u32 = 115200;
 
 pub struct AtCommander {
-    port: Box<dyn serialport::SerialPort>,
+    port: Box<dyn ReadWrite + Send>,
 }
+
+pub trait ReadWrite: Read + Write {}
+impl<T: Read + Write> ReadWrite for T {}
 
 #[derive(Debug, Clone)]
 pub enum AtResponse {
@@ -37,16 +40,21 @@ impl AtCommander {
                     path.display()
                 ))
             })?;
-        Ok(Self { port })
+        Ok(Self { port: Box::new(port) })
+    }
+
+    pub fn from_stream<S: Read + Write + Send + 'static>(stream: S, _timeout: Duration) -> Self {
+        Self {
+            port: Box::new(stream),
+        }
     }
 
     pub fn send_command(&mut self, cmd: &str) -> BridgeResult<AtResponse> {
         let full_cmd = format!("{cmd}\r\n");
-        self.port
-            .write_all(full_cmd.as_bytes())
+        let port = self.port.as_mut();
+        port.write_all(full_cmd.as_bytes())
             .map_err(|e| BridgeError::Discovery(format!("AT write failed: {e}")))?;
-        self.port
-            .flush()
+        port.flush()
             .map_err(|e| BridgeError::Discovery(format!("AT flush failed: {e}")))?;
 
         tracing::trace!(target: "at", cmd = cmd, "sent");
@@ -54,7 +62,7 @@ impl AtCommander {
     }
 
     fn read_response(&mut self) -> BridgeResult<AtResponse> {
-        let mut reader = BufReader::new(&mut self.port);
+        let mut reader = BufReader::new(self.port.as_mut() as &mut dyn Read);
         let mut lines = Vec::new();
 
         loop {
