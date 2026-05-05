@@ -43,7 +43,7 @@ impl Call {
             {
                 let uri_cstr = CString::new(dest_uri)
                     .map_err(|_| PjsipError::CallMake("invalid destination URI".into()))?;
-                let uri = pjsua_sys::pj_str(uri_cstr.as_ptr() as *mut i8);
+                let uri = pjsua_sys::pj_str(uri_cstr.as_ptr() as *mut std::os::raw::c_char);
 
                 let mut msg_data: pjsua_sys::pjsua_msg_data = std::mem::zeroed();
                 pjsua_sys::pjsua_msg_data_init(&mut msg_data);
@@ -62,8 +62,8 @@ impl Call {
                 }
 
                 for (i, (name_c, value_c)) in header_cstrings.iter().enumerate() {
-                    let mut hname = pjsua_sys::pj_str(name_c.as_ptr() as *mut i8);
-                    let mut hvalue = pjsua_sys::pj_str(value_c.as_ptr() as *mut i8);
+                    let mut hname = pjsua_sys::pj_str(name_c.as_ptr() as *mut std::os::raw::c_char);
+                    let mut hvalue = pjsua_sys::pj_str(value_c.as_ptr() as *mut std::os::raw::c_char);
                     pjsua_sys::pjsip_generic_string_hdr_init2(
                         &mut generic_headers[i],
                         &mut hname,

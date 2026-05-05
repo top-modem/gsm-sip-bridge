@@ -42,21 +42,21 @@ impl Account {
                     config.display_name, config.username, config.sip_server, config.sip_port
                 );
                 let id_cstr = CString::new(id_str).unwrap();
-                acc_cfg.id = pjsua_sys::pj_str(id_cstr.as_ptr() as *mut i8);
+                acc_cfg.id = pjsua_sys::pj_str(id_cstr.as_ptr() as *mut std::os::raw::c_char);
 
                 let reg_uri = format!("sip:{}:{}", config.sip_server, config.sip_port);
                 let reg_cstr = CString::new(reg_uri).unwrap();
-                acc_cfg.reg_uri = pjsua_sys::pj_str(reg_cstr.as_ptr() as *mut i8);
+                acc_cfg.reg_uri = pjsua_sys::pj_str(reg_cstr.as_ptr() as *mut std::os::raw::c_char);
 
                 acc_cfg.cred_count = 1;
                 let realm_cstr = CString::new("*").unwrap();
                 let user_cstr = CString::new(config.username.clone()).unwrap();
                 let pass_cstr = CString::new(config.password.clone()).unwrap();
                 let scheme_cstr = CString::new("digest").unwrap();
-                acc_cfg.cred_info[0].realm = pjsua_sys::pj_str(realm_cstr.as_ptr() as *mut i8);
-                acc_cfg.cred_info[0].username = pjsua_sys::pj_str(user_cstr.as_ptr() as *mut i8);
-                acc_cfg.cred_info[0].data = pjsua_sys::pj_str(pass_cstr.as_ptr() as *mut i8);
-                acc_cfg.cred_info[0].scheme = pjsua_sys::pj_str(scheme_cstr.as_ptr() as *mut i8);
+                acc_cfg.cred_info[0].realm = pjsua_sys::pj_str(realm_cstr.as_ptr() as *mut std::os::raw::c_char);
+                acc_cfg.cred_info[0].username = pjsua_sys::pj_str(user_cstr.as_ptr() as *mut std::os::raw::c_char);
+                acc_cfg.cred_info[0].data = pjsua_sys::pj_str(pass_cstr.as_ptr() as *mut std::os::raw::c_char);
+                acc_cfg.cred_info[0].scheme = pjsua_sys::pj_str(scheme_cstr.as_ptr() as *mut std::os::raw::c_char);
                 acc_cfg.cred_info[0].data_type = 0; // plain text
 
                 let mut acc_id: pjsua_sys::pjsua_acc_id = -1;

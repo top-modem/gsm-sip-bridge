@@ -274,7 +274,7 @@ pub fn ensure_pjsip_thread() {
                         let mut desc = desc.borrow_mut();
                         let mut handle = handle.borrow_mut();
                         pjsua_sys::pj_thread_register(
-                            b"rust-async\0".as_ptr() as *const i8,
+                            b"rust-async\0".as_ptr() as *const std::os::raw::c_char,
                             desc.as_mut_ptr() as *mut _,
                             &mut *handle,
                         );
@@ -363,7 +363,7 @@ unsafe fn start_ringback_tone() { // SAFETY: Called only from PJSIP call-state c
         return;
     }
 
-    let pool = pjsua_sys::pjsua_pool_create(b"ringback\0".as_ptr() as *const i8, 512, 512);
+    let pool = pjsua_sys::pjsua_pool_create(b"ringback\0".as_ptr() as *const std::os::raw::c_char, 512, 512);
     if pool.is_null() {
         return;
     }
