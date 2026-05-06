@@ -62,6 +62,10 @@ impl Endpoint {
                 media_cfg.snd_clock_rate = 8000;
                 media_cfg.channel_count = 1;
                 media_cfg.no_vad = 1;
+                media_cfg.ec_tail_len = 0;
+                media_cfg.quality = 10;
+                media_cfg.ptime = 20;
+                media_cfg.jb_max = -1;
 
                 let status = pjsua_sys::pjsua_init(&cfg, &log_cfg, &media_cfg);
                 if status != PJ_SUCCESS {

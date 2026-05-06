@@ -3,6 +3,10 @@ members = ["pjsua-sys", "pjsua-safe", "gsm-sip-bridge"]
 resolver = "2"
 
 [workspace.package]
-version = "5.0.1"
+version = "5.0.2"
 edition = "2021"
 license = "MIT"
+
+[profile.release]
+strip = true
+lto = "thin"

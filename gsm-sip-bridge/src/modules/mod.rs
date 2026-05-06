@@ -397,8 +397,8 @@ fn run_module_loop(
             }
         };
 
-        if (card.state == CardState::Bridged || card.state == CardState::Answering)
-            && pjsua_safe::is_sip_peer_disconnected()
+        if pjsua_safe::is_sip_peer_disconnected()
+            && (card.state == CardState::Bridged || card.state == CardState::Answering)
         {
             tracing::info!(module = %module.id, "SIP peer disconnected, hanging up GSM");
             let _ = at.hangup();
