@@ -367,6 +367,7 @@ fn run_module_loop(
     at.send_command("AT+CLIP=1").ok();
     at.send_command("AT+CMGF=1").ok();
     at.send_command("AT+CNMI=2,1,0,0,0").ok();
+    route_audio_to_usb(&mut at, &module.id);
 
     if let Ok((rssi, _ber)) = at.check_signal() {
         tracing::info!(module = %module.id, rssi = rssi, "signal quality");
@@ -620,6 +621,28 @@ fn handle_cmti(
                 }
                 Err(e) => {
                     tracing::warn!(module = %module.id, error = %e, "failed to read SMS");
+                }
+            }
+        }
+    }
+}
+
+fn route_audio_to_usb(at: &mut AtCommander, module_id: &str) {
+    match at.send_command("AT+QPCMV=1,2") {
+        Ok(AtResponse::Ok(_)) => {
+            tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,2)");
+        }
+        _ => {
+            tracing::warn!(module = %module_id, "AT+QPCMV=1,2 failed, trying AT+QPCMV=1,0");
+            match at.send_command("AT+QPCMV=1,0") {
+                Ok(AtResponse::Ok(_)) => {
+                    tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,0)");
+                }
+                _ => {
+                    tracing::error!(
+                        module = %module_id,
+                        "failed to route voice audio to USB — audio will not work"
+                    );
                 }
             }
         }
