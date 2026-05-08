@@ -4,7 +4,6 @@ use clap::Parser;
 use gsm_sip_bridge::modules::at_commander::{AtCommander, AtResponse};
 use gsm_sip_bridge::modules::discovery;
 use gsm_sip_bridge::observability::logging;
-use libc;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -348,7 +347,12 @@ fn is_volte_call(at: &mut AtCommander) -> bool {
         Ok(AtResponse::Ok(lines)) => {
             for line in &lines {
                 if let Some(info) = line.strip_prefix("+QNWINFO:") {
-                    let rat = info.split(',').next().unwrap_or("").trim().trim_matches('"');
+                    let rat = info
+                        .split(',')
+                        .next()
+                        .unwrap_or("")
+                        .trim()
+                        .trim_matches('"');
                     let is_lte = rat.contains("LTE");
                     tracing::info!(rat, lte = is_lte, "network RAT");
                     return is_lte;
