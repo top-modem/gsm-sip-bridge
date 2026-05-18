@@ -1,5 +1,14 @@
 # Release Notes
 
+## v5.1.0
+
+- **Auto-Recovery** -- Cards automatically reload on USB disconnect or network loss with exponential backoff and per-slot give-up tracking (IMEI-keyed persistence).
+- **Startup Diagnostics** -- Phone number and network type logged per card at startup.
+- **Unix Socket Control API** -- On-demand daemon management via Unix socket.
+- **CLI Card Subcommands** -- `card restart`, `card set-mode`, `card get-mode`, `card list` for runtime card management.
+- **SQLite Schema v2** -- `card_slots` and `card_mode_prefs` tables with automatic v1→v2 migration.
+- **Network Mode Preferences** -- 2G/4G preferences persisted and re-applied on card initialization.
+
 ## v5.0.4
 
 - **gsm-echo ALSA Audio Loopback** -- Added real ALSA capture/playback to `gsm-echo`. Previously, `AT+QPCMV=1,2` routed audio to USB but nothing read or wrote the ALSA device, resulting in silence. Now spawns a dedicated loopback thread (8kHz, S16_LE, mono) on call answer and stops it on hangup, with overrun/underrun recovery.
