@@ -31,3 +31,8 @@ mutants-out/
 
 # Profiling
 *.prof*
+
+/.cargo_local
+/.rustup_local
+/tmp
+
