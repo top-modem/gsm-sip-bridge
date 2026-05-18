@@ -3,7 +3,7 @@ DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
 
 .PHONY: build test run clean lint format dev dev-gsm dev-sip \
         docker-build docker-up docker-down docker-logs \
-        coverage help
+        coverage mutants mutants-full help
 
 build: ## Compile all binaries (release mode)
 	@cargo build --workspace --release
@@ -50,6 +50,21 @@ docker-logs: ## Tail logs from all containers
 coverage: ## Generate code coverage report (requires cargo-llvm-cov)
 	@cargo llvm-cov --workspace --lcov --output-path lcov.info
 	@cargo llvm-cov report --workspace
+
+mutants: ## Mutation test core logic (store, AT parser, control protocol) — fast, no hardware needed
+	@LD_PRELOAD=/tmp/rename_shim.so cargo mutants \
+	  --package gsm-sip-bridge \
+	  --re 'store/schema|store/slots|control/protocol|modules/at_commander' \
+	  --timeout 30 \
+	  --jobs 2 \
+	  --output mutants-out/
+
+mutants-full: ## Mutation test all non-hardware modules (slower, includes config + modules/mod.rs)
+	@LD_PRELOAD=/tmp/rename_shim.so cargo mutants \
+	  --package gsm-sip-bridge \
+	  --timeout 45 \
+	  --jobs 2 \
+	  --output mutants-out/
 
 help: ## Show all available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \

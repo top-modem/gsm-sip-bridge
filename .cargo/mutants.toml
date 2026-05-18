@@ -1,0 +1,20 @@
+# cargo-mutants configuration — see https://mutants.rs/config-file.html
+# Run with: LD_PRELOAD=/tmp/rename_shim.so cargo mutants [options]
+
+# Kill hung mutants (socat/PTY, ALSA, PJSUA FFI) quickly.
+# Baseline test suite runs in ~5s; 30s is 6× headroom.
+timeout_multiplier = 4.0
+minimum_test_timeout = 30
+
+# Exclude modules that require real hardware, spawn async tasks with no
+# deterministic test exit, or are pure FFI bindings with no testable logic.
+exclude_globs = [
+    "gsm-sip-bridge/src/bin/**",
+    "gsm-sip-bridge/src/sip/**",
+    "gsm-sip-bridge/src/audio_pipeline.rs",
+    "gsm-sip-bridge/src/beep.rs",
+    "gsm-sip-bridge/src/observability/**",
+    "gsm-sip-bridge/src/metrics/**",
+    "pjsua-sys/**",
+    "pjsua-safe/**",
+]
