@@ -45,6 +45,26 @@ The bridge reads a single TOML configuration file specified via `--config`.
 | `retry_interval_sec` | integer | 30 | Range: 5-600 |
 | `max_concurrent` | integer | 8 | Range: 1-8 |
 
+### `[resilience]`
+
+Controls automatic card recovery behavior. All keys are optional; defaults cover typical homelab use.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `initial_backoff_sec` | integer | 5 | Delay before the first recovery retry (seconds). Range: 1-600 |
+| `max_backoff_sec` | integer | 120 | Maximum backoff delay after repeated failures (seconds). Range: 1-3600 |
+| `max_retries` | integer | 10 | Give-up threshold: stop retrying a slot after this many consecutive failures. Range: 1-1000 |
+| `network_loss_timeout_sec` | integer | 60 | Seconds of failed network registration before recovery is triggered. Range: 10-600 |
+| `network_poll_interval_sec` | integer | 30 | How often to poll the modem for network registration status (seconds). Range: 5-300 |
+
+### `[control]`
+
+Configures the Unix domain socket used by `card` CLI subcommands to communicate with the running daemon.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `socket_path` | string | `/tmp/gsm-sip-bridge.sock` | Filesystem path for the control socket. Must be writable by the bridge process and readable by CLI users. |
+
 ## Examples
 
 ### Single-card development
@@ -88,4 +108,14 @@ port = 9091
 [modules]
 retry_interval_sec = 30
 max_concurrent = 8
+
+[resilience]
+initial_backoff_sec = 5
+max_backoff_sec = 120
+max_retries = 10
+network_loss_timeout_sec = 60
+network_poll_interval_sec = 30
+
+[control]
+socket_path = "/run/gsm-sip-bridge/control.sock"
 ```

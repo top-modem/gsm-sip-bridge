@@ -2,13 +2,17 @@
 
 Bridge incoming GSM calls on Quectel EC20 modules to a SIP extension over VoIP. When someone dials the GSM number, the system auto-answers, dials a configurable SIP extension, and routes audio bidirectionally between the two parties. Supports multiple EC20 modules simultaneously. Incoming SMS messages are persisted to a local database and optionally forwarded to Discord.
 
-**Version**: 5.0.1 | **Language**: Rust | **Platform**: Linux (amd64, arm64)
+**Version**: 5.1.0 | **Language**: Rust | **Platform**: Linux (amd64, arm64)
 
 ## Features
 
 - **GSM-to-SIP Call Bridging** -- Auto-answers incoming GSM calls on Quectel EC20 modules and bridges audio bidirectionally to a SIP extension via a PBX.
 - **Multi-Module Support** -- Detects all connected EC20 modules at startup, assigns stable hardware IDs, and handles concurrent calls across modules independently.
-- **Automatic Module Recovery** -- Failed modules (SIM issues, serial errors) are retried every 30 seconds and rejoin the active pool when functional.
+- **Automatic Card Recovery** -- Detects USB disconnects within 5 seconds and network registration loss within a configurable timeout. Uses exponential backoff (default: 5 s → 120 s) and gives up after a configurable retry limit. Each card recovers independently; other cards are unaffected.
+- **IMEI-keyed Slot Persistence** -- A card's slot assignment is derived from its IMEI and stored in the database. The same physical card always gets the same slot number across restarts and re-plugs, even if the USB enumeration order changes.
+- **Startup Diagnostics** -- Prints each card's phone number and current network type (`4G/LTE`, `3G/UMTS`, `2G/EDGE`, `No Signal`, `No SIM`) before the ready message, giving immediate visibility into provisioning state.
+- **Persisted Network Mode Preferences** -- The `card set-mode` command stores a per-slot network preference (`2g`, `3g`, `4g`, `auto`) in the database. The preference is re-applied to the modem on every card initialization, including after automatic recovery.
+- **CLI Card Management** -- `card list`, `card restart`, `card set-mode`, and `card get-mode` subcommands communicate with the running daemon over a Unix domain socket for on-demand slot management without restarting the bridge.
 - **DID Passthrough** -- Forwards the GSM caller's number as the SIP DID via `P-Asserted-Identity` and `X-GSM-Caller-ID` headers, enabling PBX inbound routing rules to decide the destination.
 - **SMS-to-Discord Forwarding** -- Captures incoming SMS from all modules, persists to a local SQLite database, and posts rich embed notifications to a Discord webhook.
 - **Call Logging** -- Every incoming GSM call is recorded in a local SQLite database with caller ID, module, timestamp, duration, SIP destination, and outcome (answered/missed/failed).
@@ -288,6 +292,12 @@ max_concurrent = 8
 | `[sms]` | `db_path` | `bridge.db` | Path to the SQLite database |
 | `[metrics]` | `port` | `9091` | Port for the Prometheus metrics HTTP server |
 | `[modules]` | `max_concurrent` | `8` | Maximum concurrent active modules |
+| `[resilience]` | `initial_backoff_sec` | `5` | First retry delay after a card failure (seconds) |
+| `[resilience]` | `max_backoff_sec` | `120` | Backoff cap (seconds) |
+| `[resilience]` | `max_retries` | `10` | Give-up threshold per slot |
+| `[resilience]` | `network_loss_timeout_sec` | `60` | Seconds before a loss of network registration triggers recovery |
+| `[resilience]` | `network_poll_interval_sec` | `30` | How often to check network registration status (seconds) |
+| `[control]` | `socket_path` | `/tmp/gsm-sip-bridge.sock` | Path for the Unix domain socket used by CLI subcommands |
 
 Secrets support `env:VAR_NAME` syntax to avoid plaintext in config files.
 
@@ -315,6 +325,22 @@ All incoming calls and SMS messages are persisted to the SQLite database (WAL mo
 | `body` | Message text |
 | `received_at` | ISO 8601 timestamp (UTC) |
 | `forwarding_status` | `pending`, `sent`, `failed`, or `skipped` |
+
+**card_slots table** (IMEI→slot mapping, persisted across restarts):
+
+| Column | Description |
+|---|---|
+| `slot` | Slot index (0-based, stable for the life of the hardware) |
+| `imei` | 15-digit IMEI uniquely identifying the physical modem |
+| `assigned_at` | ISO 8601 timestamp when the slot was first assigned |
+
+**card_mode_prefs table** (per-slot network mode preference):
+
+| Column | Description |
+|---|---|
+| `slot` | Slot index |
+| `mode` | Network mode: `auto`, `2g`, `3g`, or `4g` |
+| `updated_at` | ISO 8601 timestamp of the last `card set-mode` call |
 
 ## Observability
 
@@ -369,6 +395,29 @@ gsm-sip-bridge --config config.toml              # auto-detect all EC20 modules
 gsm-sip-bridge --config config.toml --verbose    # verbose SIP + AT logging
 gsm-sip-bridge -s /dev/ttyUSB3 -a hw:2,0        # single-card override
 ```
+
+### CLI Card Management
+
+The `card` subcommands connect to the running daemon over a Unix domain socket and return immediately.
+
+```bash
+# List all known slots with their state, phone number, and network type
+gsm-sip-bridge card list
+
+# Restart a specific slot (resets give-up state; waits for re-initialization)
+gsm-sip-bridge card restart --slot 0
+
+# Switch a slot's network preference to 4G (persisted; re-applied on recovery)
+gsm-sip-bridge card set-mode --slot 0 --mode 4g
+
+# Supported modes: 2g, 3g, 4g, auto
+gsm-sip-bridge card set-mode --slot 1 --mode auto
+
+# Query the stored network mode preference for a slot
+gsm-sip-bridge card get-mode --slot 0
+```
+
+The daemon must be running and its control socket reachable (default: `/tmp/gsm-sip-bridge.sock`, configurable under `[control]` in `config.toml`). All `card` subcommands exit non-zero on error and print a human-readable message.
 
 ## Makefile Targets
 
