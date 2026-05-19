@@ -3,10 +3,26 @@ use crate::error::PjsipError;
 use crate::error::PJ_SUCCESS;
 use crate::log_bridge;
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(feature = "pjsip-linked")]
+use std::sync::atomic::{AtomicI32, AtomicU64};
 
 static SIP_PEER_DISCONNECTED: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "pjsip-linked")]
 static RINGBACK_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+// Audio level monitor — populated by a per-call sampling thread (slot 0 = sound device).
+// tx_level from slot 0 = ALSA capture → bridge = GSM→SIP
+// rx_level from slot 0 = bridge → ALSA playback = SIP→GSM
+#[cfg(feature = "pjsip-linked")]
+static AUDIO_MONITOR_RUNNING: AtomicBool = AtomicBool::new(false);
+#[cfg(feature = "pjsip-linked")]
+static AUDIO_CALL_SLOT: AtomicI32 = AtomicI32::new(-1);
+#[cfg(feature = "pjsip-linked")]
+static AUDIO_GSM_TO_SIP_SUM: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "pjsip-linked")]
+static AUDIO_SIP_TO_GSM_SUM: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "pjsip-linked")]
+static AUDIO_SAMPLE_COUNT: AtomicU64 = AtomicU64::new(0);
 
 pub fn is_sip_peer_disconnected() -> bool {
     SIP_PEER_DISCONNECTED.swap(false, Ordering::AcqRel)
@@ -315,6 +331,32 @@ unsafe extern "C" fn on_call_media_state_cb(call_id: pjsua_sys::pjsua_call_id) {
             call_slot,
             "call media active, audio connected to sound device"
         );
+
+        // Reset accumulators and start per-second signal-level sampler
+        AUDIO_GSM_TO_SIP_SUM.store(0, Ordering::Relaxed);
+        AUDIO_SIP_TO_GSM_SUM.store(0, Ordering::Relaxed);
+        AUDIO_SAMPLE_COUNT.store(0, Ordering::Relaxed);
+        AUDIO_CALL_SLOT.store(call_slot, Ordering::Relaxed);
+        AUDIO_MONITOR_RUNNING.store(true, Ordering::Release);
+
+        std::thread::spawn(|| {
+            while AUDIO_MONITOR_RUNNING.load(Ordering::Acquire) {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if !AUDIO_MONITOR_RUNNING.load(Ordering::Acquire) {
+                    break;
+                }
+                let mut tx: u32 = 0; // GSM→SIP (ALSA capture → bridge)
+                let mut rx: u32 = 0; // SIP→GSM (bridge → ALSA playback)
+                // SAFETY: pjsua is running; slot 0 is always the sound device
+                if pjsua_sys::pjsua_conf_get_signal_level(0, &mut tx, &mut rx)
+                    == PJ_SUCCESS
+                {
+                    AUDIO_GSM_TO_SIP_SUM.fetch_add(tx as u64, Ordering::Relaxed);
+                    AUDIO_SIP_TO_GSM_SUM.fetch_add(rx as u64, Ordering::Relaxed);
+                    AUDIO_SAMPLE_COUNT.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        });
     }
 }
 
@@ -346,6 +388,25 @@ unsafe extern "C" fn on_call_state_cb( // SAFETY: PJSIP invokes with valid call_
         }
         s if s == pjsua_sys::pjsip_inv_state_PJSIP_INV_STATE_DISCONNECTED => {
             stop_ringback_tone();
+
+            AUDIO_MONITOR_RUNNING.store(false, Ordering::Release);
+            let count = AUDIO_SAMPLE_COUNT.load(Ordering::Relaxed);
+            let gsm_to_sip = AUDIO_GSM_TO_SIP_SUM.load(Ordering::Relaxed);
+            let sip_to_gsm = AUDIO_SIP_TO_GSM_SUM.load(Ordering::Relaxed);
+            if count > 0 {
+                tracing::info!(
+                    call_id,
+                    gsm_to_sip_avg = gsm_to_sip / count,
+                    sip_to_gsm_avg = sip_to_gsm / count,
+                    gsm_to_sip_total = gsm_to_sip,
+                    sip_to_gsm_total = sip_to_gsm,
+                    samples = count,
+                    "call audio levels (0=silence 255=max)",
+                );
+            } else {
+                tracing::info!(call_id, "call ended — no audio samples collected (media never became active)");
+            }
+
             tracing::info!(call_id, "SIP peer disconnected, signaling GSM hangup");
             SIP_PEER_DISCONNECTED.store(true, Ordering::Release);
         }
