@@ -289,8 +289,8 @@ impl CardPool {
             "card pool running"
         );
 
-        // USB rescan for hotplug reconnect (every 5 s)
-        let mut rescan_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        // USB rescan for hotplug reconnect (every 60 s — hot-plug is rare)
+        let mut rescan_deadline = tokio::time::Instant::now() + Duration::from_secs(60);
 
         loop {
             // Compute next retry deadline across all recovering/initializing slots
@@ -413,7 +413,7 @@ impl CardPool {
                     // USB rescan for new modules
                     if now >= rescan_deadline {
                         self.rescan_new_modules(&mut slots, &mut tasks, &event_tx);
-                        rescan_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+                        rescan_deadline = tokio::time::Instant::now() + Duration::from_secs(60);
                     }
 
                     metrics::MODULES_ACTIVE.set(slots.values().filter(|s| s.lifecycle == LifecycleState::Ready).count() as f64);

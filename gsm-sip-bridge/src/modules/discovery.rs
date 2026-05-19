@@ -56,7 +56,7 @@ pub fn scan_modules() -> BridgeResult<Vec<DiscoveredModule>> {
 
         match (&serial_port, &audio_device) {
             (Some(port), Some(card)) => {
-                tracing::info!(
+                tracing::debug!(
                     module_id = %id,
                     usb_path = %usb_name,
                     serial_port = %port.display(),
