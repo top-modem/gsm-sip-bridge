@@ -48,6 +48,7 @@ pub type ControlCmdReceiver = mpsc::Receiver<(ControlCmd, oneshot::Sender<Contro
 
 enum ModuleCmd {
     SetMode(NetworkMode, oneshot::Sender<Result<NetworkMode, String>>),
+    Reboot,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -692,10 +693,21 @@ impl CardPool {
             ControlCmd::CardRestart { slot } => {
                 if let Some(state) = slots.get_mut(&slot) {
                     tracing::info!(slot = slot, module = %state.module.id, "card restart requested");
-                    state.cmd_tx = None;
-                    state.lifecycle = LifecycleState::Initializing;
+                    if let Some(cmd_tx) = state.cmd_tx.take() {
+                        // Worker is running — ask it to send AT+CFUN=1,1 and exit
+                        let _ = cmd_tx.send(ModuleCmd::Reboot);
+                    } else {
+                        // Worker not running — send AT+CFUN=1,1 directly
+                        tracing::info!(module = %state.module.id, "no worker running, rebooting modem directly");
+                        if let Ok(mut at) = AtCommander::open(&state.module.serial_port) {
+                            at.reboot();
+                        }
+                    }
+                    state.lifecycle = LifecycleState::Recovering;
                     state.retry_count = 0;
-                    state.next_retry_at = Some(tokio::time::Instant::now());
+                    // Allow 10 s for the modem to reboot before re-initializing
+                    state.next_retry_at =
+                        Some(tokio::time::Instant::now() + Duration::from_secs(10));
                     let _ = reply.send(ControlResp::ok());
                 } else {
                     let max = slots.keys().max().copied().unwrap_or(0);
@@ -877,6 +889,11 @@ fn run_module_loop(
                     ModuleCmd::SetMode(mode, resp_tx) => {
                         let result = at.set_network_mode(mode).map_err(|e| e.to_string());
                         let _ = resp_tx.send(result);
+                    }
+                    ModuleCmd::Reboot => {
+                        tracing::info!(module = %module.id, "rebooting modem (AT+CFUN=1,1)");
+                        at.reboot();
+                        return Ok(());
                     }
                 }
             }

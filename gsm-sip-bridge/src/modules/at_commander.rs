@@ -127,6 +127,11 @@ impl AtCommander {
         }
     }
 
+    pub fn reboot(&mut self) {
+        // Fire-and-forget: modem will not send OK before it reboots
+        self.send_command("AT+CFUN=1,1").ok();
+    }
+
     pub fn send_command(&mut self, cmd: &str) -> BridgeResult<AtResponse> {
         let full_cmd = format!("{cmd}\r\n");
         let port = self.port.as_mut();
