@@ -6,14 +6,15 @@ shell commands, and other important information, read the current plan at
 
 ## Pre-commit Checklist
 
-Before every commit, run the following and fix any issues:
+**MANDATORY — run before EVERY commit, no exceptions:**
 
 ```bash
-cargo fmt --check        # formatting
-cargo clippy -p gsm-sip-bridge -p pjsua-safe -- -D warnings  # lint
-cargo test --workspace   # tests
+cargo fmt --all          # fix formatting in place
+make lint                # rustfmt check + clippy -D warnings + unsafe ratio
+cargo test --workspace   # all tests must pass
 ```
 
 Or equivalently: `make format && make lint && make test`
 
-Do NOT commit if any of these fail.
+Do NOT commit if any of these fail. `make lint` failing has caused broken
+commits in the past (e.g. rustfmt line-length violations in test files).
