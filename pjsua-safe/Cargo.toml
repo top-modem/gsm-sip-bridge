@@ -10,3 +10,4 @@ pjsip-linked = []
 [dependencies]
 pjsua-sys = { path = "../pjsua-sys" }
 tracing = "0.1"
+libc = "0.2"

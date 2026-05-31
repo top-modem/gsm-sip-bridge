@@ -59,6 +59,14 @@ tx_level = 1.0
 # report "alsa_capture_overrun" / "alsa_playback_underrun" events.
 snd_rec_latency_ms = 150
 snd_play_latency_ms = 150
+# Real-time (SCHED_FIFO) priority for PJMEDIA's sound-device ("media") thread, applied
+# once a call's audio device opens. 0 = leave at normal SCHED_OTHER (default). 1–99 =
+# enable real-time scheduling so the ALSA capture buffer is serviced ahead of best-effort
+# work, preventing XRUNs / choppy GSM audio. 20 is a good starting point. Requires
+# CAP_SYS_NICE (privileged container); best-effort — if not permitted it logs a warning
+# and the call still runs. On kernels with CONFIG_RT_GROUP_SCHED you also need a non-zero
+# cpu_rt_runtime for the container.
+rt_audio_prio = 20
 
 [scheduled_restart]
 # Preventive nightly card-restart cycle. The daemon walks every known slot in

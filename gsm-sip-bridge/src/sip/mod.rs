@@ -39,6 +39,7 @@ struct SipBridgeConfig {
     tx_level: f32,
     snd_rec_latency_ms: u32,
     snd_play_latency_ms: u32,
+    rt_audio_prio: u32,
 }
 
 impl SipBridge {
@@ -61,6 +62,7 @@ impl SipBridge {
             tx_level: config.audio.tx_level,
             snd_rec_latency_ms: config.audio.snd_rec_latency_ms,
             snd_play_latency_ms: config.audio.snd_play_latency_ms,
+            rt_audio_prio: config.audio.rt_audio_prio,
         };
 
         Self {
@@ -166,6 +168,21 @@ impl SipBridge {
             .map_err(|e| format!("{e}"))?;
 
         tracing::info!(alsa = %alsa_device, pjsip_dev = dev_index, "sound device set");
+
+        // Promote PJMEDIA's sound-device thread to real-time so the ALSA capture buffer is
+        // serviced ahead of best-effort work (prevents XRUNs / choppy GSM audio). Opt-in
+        // via [audio] rt_audio_prio; best-effort, never fails the call path.
+        if self.config.rt_audio_prio > 0 {
+            let promoted = pjsua_safe::thread_prio::promote_threads_fifo(
+                self.config.rt_audio_prio as i32,
+                &["media"],
+            );
+            tracing::info!(
+                prio = self.config.rt_audio_prio,
+                promoted,
+                "applied real-time scheduling to audio thread(s)"
+            );
+        }
         Ok(())
     }
 

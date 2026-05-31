@@ -46,6 +46,7 @@ const AUDIO_KEYS: &[&str] = &[
     "eec_mode",
     "snd_rec_latency_ms",
     "snd_play_latency_ms",
+    "rt_audio_prio",
 ];
 const SCHEDULED_RESTART_KEYS: &[&str] = &[
     "enabled",
@@ -202,6 +203,11 @@ pub struct AudioConfig {
     /// ALSA playback (SIP→GSM) ring-buffer depth in milliseconds, passed to PJMEDIA as
     /// `snd_play_latency`. Range 20–2000; default 150 (PJSUA default is 140).
     pub snd_play_latency_ms: u32,
+    /// `SCHED_FIFO` priority to apply to PJMEDIA's `media` (sound-device) thread once a
+    /// call's audio device is open. `0` (default) leaves it at `SCHED_OTHER`. Range 1–99;
+    /// 10–30 is recommended. Requires `CAP_SYS_NICE` (privileged container); best-effort,
+    /// failures are logged and never fatal.
+    pub rt_audio_prio: u32,
 }
 
 /// Default ALSA capture latency (ms) — a modest bump over PJSUA's 100 ms to tolerate
@@ -223,6 +229,7 @@ impl Default for AudioConfig {
             tx_level: 1.0,
             snd_rec_latency_ms: DEFAULT_SND_REC_LATENCY_MS,
             snd_play_latency_ms: DEFAULT_SND_PLAY_LATENCY_MS,
+            rt_audio_prio: 0,
         }
     }
 }
@@ -793,6 +800,20 @@ fn parse_audio(root: &toml::map::Map<String, Value>) -> BridgeResult<AudioConfig
     let snd_play_latency_ms =
         parse_latency_ms(t, "snd_play_latency_ms", DEFAULT_SND_PLAY_LATENCY_MS)?;
 
+    let rt_audio_prio = match t.get("rt_audio_prio") {
+        Some(v) => {
+            let n = as_integer(v, "audio.rt_audio_prio")?;
+            // 0 disables; 1–99 are the valid SCHED_FIFO priorities.
+            if n != 0 && !(1..=99).contains(&n) {
+                return Err(BridgeError::Config(format!(
+                    "audio.rt_audio_prio must be 0 (off) or 1–99; got {n}"
+                )));
+            }
+            n as u32
+        }
+        None => 0,
+    };
+
     Ok(AudioConfig {
         profile,
         settings,
@@ -802,6 +823,7 @@ fn parse_audio(root: &toml::map::Map<String, Value>) -> BridgeResult<AudioConfig
         eec_mode,
         snd_rec_latency_ms,
         snd_play_latency_ms,
+        rt_audio_prio,
     })
 }
 
@@ -1199,5 +1221,36 @@ password = "pass"
             .unwrap_err()
             .to_string()
             .contains("audio.snd_rec_latency_ms must be 20–2000"));
+    }
+
+    #[test]
+    fn audio_rt_audio_prio_defaults_off() {
+        let root: toml::Value = format!("{}\n[audio]\nprofile = \"lan\"\n", MINIMAL_TOML)
+            .parse()
+            .unwrap();
+        let audio = parse_audio(root.as_table().unwrap()).unwrap();
+        assert_eq!(audio.rt_audio_prio, 0);
+    }
+
+    #[test]
+    fn audio_rt_audio_prio_valid_value_parsed() {
+        let root: toml::Value = format!("{}\n[audio]\nrt_audio_prio = 20\n", MINIMAL_TOML)
+            .parse()
+            .unwrap();
+        let audio = parse_audio(root.as_table().unwrap()).unwrap();
+        assert_eq!(audio.rt_audio_prio, 20);
+    }
+
+    #[test]
+    fn audio_rt_audio_prio_out_of_range_returns_error() {
+        let root: toml::Value = format!("{}\n[audio]\nrt_audio_prio = 150\n", MINIMAL_TOML)
+            .parse()
+            .unwrap();
+        let result = parse_audio(root.as_table().unwrap());
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("audio.rt_audio_prio must be 0 (off) or 1–99"));
     }
 }

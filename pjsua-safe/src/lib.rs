@@ -4,6 +4,7 @@ pub mod call;
 pub mod endpoint;
 pub mod error;
 pub mod log_bridge;
+pub mod thread_prio;
 
 pub use account::{Account, AccountConfig, RegistrationListener};
 pub use audio_media_port::{AudioMediaPort, MediaPortHandle};
