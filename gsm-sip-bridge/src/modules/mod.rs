@@ -1186,6 +1186,15 @@ impl CardPool {
                         state.lifecycle = LifecycleState::Recovering;
                         state.network_type = NetworkType::NoSignal;
                         state.cmd_tx = None;
+                        state.retry_count = 0;
+                        state.next_retry_at = Some(
+                            tokio::time::Instant::now()
+                                + backoff_delay(
+                                    0,
+                                    self.config.resilience.initial_backoff_sec,
+                                    self.config.resilience.max_backoff_sec,
+                                ),
+                        );
                     }
                     // Network loss tears down any in-progress call; clear the flag so
                     // the scheduler does not permanently defer this slot.
