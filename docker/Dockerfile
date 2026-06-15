@@ -61,7 +61,7 @@ RUN cargo build --release --workspace --features gsm-sip-bridge/pjsip-linked
 # Stage 4: Minimal Alpine runtime
 FROM alpine:3.21 AS runtime
 RUN apk add --no-cache alsa-lib eudev-libs ca-certificates wget \
-    libgcc libuuid libssl3 libcrypto3
+    libgcc libuuid libssl3 libcrypto3 tzdata
 
 RUN addgroup -S bridge && adduser -S -G bridge -h /data bridge
 COPY --from=rust-builder /app/target/release/gsm-sip-bridge /usr/local/bin/
