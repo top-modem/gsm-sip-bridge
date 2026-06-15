@@ -1,5 +1,13 @@
 # Release Notes
 
+## v5.6.4
+
+- **Fix: timezone support in Alpine container** — Alpine's musl libc requires the `tzdata` package to read timezone information from `/usr/share/zoneinfo`. Without it, the `TZ` environment variable has no effect and the container reports all times in UTC, making logs hard to correlate with local events. Added `tzdata` to the runtime stage so `TZ=Asia/Kolkata` (or any other timezone in `.env`) now correctly converts timestamps.
+
+```
+docker pull ghcr.io/selvakn/gsm-sip-bridge:5.6.4
+```
+
 ## v5.6.3
 
 - **Fix: module permanently stuck after scheduled restart** — When the modem's `AT+CFUN=1,1` reboot caused a two-phase USB re-enumeration, the `NetworkLost` event would transition the slot to `Recovering` without setting `next_retry_at`. The retry loop requires a non-None `next_retry_at` to fire, so the slot was permanently invisible to recovery — staying stuck in `Recovering` with no worker and no scheduled retry. All subsequent hourly scheduled restart cycles skipped the slot (non-Ready), requiring a manual container restart to recover. Fix: `NetworkLost` now resets `retry_count = 0` and sets `next_retry_at` with the configured initial backoff, matching the behavior of all other `Recovering` transitions.
