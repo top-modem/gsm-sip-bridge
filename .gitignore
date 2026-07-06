@@ -36,3 +36,4 @@ mutants-out/
 /.rustup_local
 /tmp
 
+bridge.db

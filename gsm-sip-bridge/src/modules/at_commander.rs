@@ -262,6 +262,8 @@ impl AtCommander {
     }
 
     pub fn query_phone_number(&mut self) -> BridgeResult<String> {
+        // Quectel EC20 needs the SIM phonebook selected before AT+CNUM works.
+        self.send_command("AT$QCPBMPREF=1").ok();
         match self.send_command("AT+CNUM")? {
             AtResponse::Ok(lines) => {
                 for line in &lines {
@@ -381,84 +383,112 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    /// Mock stream: reads from a fixed byte buffer, discards writes.
+    /// Mock stream: serves one response per write cycle, discards writes.
     struct MockStream {
-        reader: Cursor<Vec<u8>>,
+        responses: Vec<Vec<u8>>,
+        idx: usize,
+        pos: usize,
     }
 
     impl MockStream {
-        fn new(response: &str) -> Self {
+        fn new(responses: Vec<&str>) -> Self {
             Self {
-                reader: Cursor::new(response.as_bytes().to_vec()),
+                responses: responses
+                    .into_iter()
+                    .map(|s| s.as_bytes().to_vec())
+                    .collect(),
+                idx: 0,
+                pos: 0,
             }
         }
     }
 
     impl Read for MockStream {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            self.reader.read(buf)
+            if self.idx >= self.responses.len() {
+                return Ok(0);
+            }
+            let data = &self.responses[self.idx];
+            let remaining = data.len() - self.pos;
+            if remaining == 0 {
+                return Ok(0);
+            }
+            let n = remaining.min(buf.len());
+            buf[..n].copy_from_slice(&data[self.pos..self.pos + n]);
+            self.pos += n;
+            Ok(n)
         }
     }
 
     impl Write for MockStream {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            Ok(buf.len())
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            if self.idx + 1 < self.responses.len() {
+                self.idx += 1;
+            }
+            self.pos = 0;
+            Ok(_buf.len())
         }
         fn flush(&mut self) -> std::io::Result<()> {
             Ok(())
         }
     }
 
-    fn make_commander(response: &str) -> AtCommander {
-        AtCommander::from_stream(MockStream::new(response), Duration::from_secs(1))
+    fn make_commander(responses: Vec<&str>) -> AtCommander {
+        AtCommander::from_stream(MockStream::new(responses), Duration::from_secs(1))
     }
 
     #[test]
     fn test_query_imei() {
-        let mut at = make_commander("867584030123456\r\nOK\r\n");
+        let mut at = make_commander(vec!["867584030123456\r\nOK\r\n"]);
         assert_eq!(at.query_imei().unwrap(), "867584030123456");
     }
 
     #[test]
     fn test_query_phone_number_present() {
-        let mut at = make_commander("+CNUM: \"\",\"+91XXXXXXXXXX\",145\r\nOK\r\n");
+        let mut at = make_commander(vec![
+            "OK\r\n",
+            "+CNUM: \"\",\"+91XXXXXXXXXX\",145\r\nOK\r\n",
+        ]);
         assert_eq!(at.query_phone_number().unwrap(), "+91XXXXXXXXXX");
     }
 
     #[test]
     fn test_query_phone_number_error() {
-        let mut at = make_commander("ERROR\r\n");
+        let mut at = make_commander(vec!["OK\r\n", "ERROR\r\n"]);
         assert_eq!(at.query_phone_number().unwrap(), "Unknown");
     }
 
     #[test]
     fn test_query_network_type_lte() {
-        let mut at =
-            make_commander("+QNWINFO: \"FDD LTE\",\"46001\",\"LTE BAND 3\",1825\r\nOK\r\n");
+        let mut at = make_commander(vec![
+            "+QNWINFO: \"FDD LTE\",\"46001\",\"LTE BAND 3\",1825\r\nOK\r\n",
+        ]);
         assert_eq!(at.query_network_type().unwrap(), NetworkType::FourGLte);
     }
 
     #[test]
     fn test_query_network_type_wcdma() {
-        let mut at = make_commander("+QNWINFO: \"WCDMA\",\"46001\",\"WCDMA 850\",4400\r\nOK\r\n");
+        let mut at = make_commander(vec![
+            "+QNWINFO: \"WCDMA\",\"46001\",\"WCDMA 850\",4400\r\nOK\r\n",
+        ]);
         assert_eq!(at.query_network_type().unwrap(), NetworkType::ThreeGUmts);
     }
 
     #[test]
     fn test_query_network_type_gsm() {
-        let mut at = make_commander("+QNWINFO: \"GSM\",\"46001\",\"GSM 900\",80\r\nOK\r\n");
+        let mut at = make_commander(vec!["+QNWINFO: \"GSM\",\"46001\",\"GSM 900\",80\r\nOK\r\n"]);
         assert_eq!(at.query_network_type().unwrap(), NetworkType::TwoGEdge);
     }
 
     #[test]
     fn test_query_network_type_no_signal() {
-        let mut at = make_commander("ERROR\r\n");
+        let mut at = make_commander(vec!["ERROR\r\n"]);
         assert_eq!(at.query_network_type().unwrap(), NetworkType::NoSignal);
     }
 
     #[test]
     fn test_query_network_mode() {
-        let mut at = make_commander("+QCFG: \"nwscanmode\",3\r\nOK\r\n");
+        let mut at = make_commander(vec!["+QCFG: \"nwscanmode\",3\r\nOK\r\n"]);
         assert_eq!(at.query_network_mode().unwrap(), NetworkMode::Lte);
     }
 
@@ -513,26 +543,34 @@ mod tests {
     // Kills: || → && at line 296 (before UMTS) and 297 (before HSPA)
     #[test]
     fn test_query_network_type_umts_keyword() {
-        let mut at = make_commander("+QNWINFO: \"UMTS\",\"46001\",\"UMTS 2100\",10812\r\nOK\r\n");
+        let mut at = make_commander(vec![
+            "+QNWINFO: \"UMTS\",\"46001\",\"UMTS 2100\",10812\r\nOK\r\n",
+        ]);
         assert_eq!(at.query_network_type().unwrap(), NetworkType::ThreeGUmts);
     }
 
     #[test]
     fn test_query_network_type_hspa_keyword() {
-        let mut at = make_commander("+QNWINFO: \"HSPA\",\"46001\",\"WCDMA 2100\",10812\r\nOK\r\n");
+        let mut at = make_commander(vec![
+            "+QNWINFO: \"HSPA\",\"46001\",\"WCDMA 2100\",10812\r\nOK\r\n",
+        ]);
         assert_eq!(at.query_network_type().unwrap(), NetworkType::ThreeGUmts);
     }
 
     // Kills: || → && at line 301 (before GPRS) and 302 (before EDGE)
     #[test]
     fn test_query_network_type_gprs_keyword() {
-        let mut at = make_commander("+QNWINFO: \"GPRS\",\"46001\",\"GSM 900\",80\r\nOK\r\n");
+        let mut at = make_commander(vec![
+            "+QNWINFO: \"GPRS\",\"46001\",\"GSM 900\",80\r\nOK\r\n",
+        ]);
         assert_eq!(at.query_network_type().unwrap(), NetworkType::TwoGEdge);
     }
 
     #[test]
     fn test_query_network_type_edge_keyword() {
-        let mut at = make_commander("+QNWINFO: \"EDGE\",\"46001\",\"GSM 900\",80\r\nOK\r\n");
+        let mut at = make_commander(vec![
+            "+QNWINFO: \"EDGE\",\"46001\",\"GSM 900\",80\r\nOK\r\n",
+        ]);
         assert_eq!(at.query_network_type().unwrap(), NetworkType::TwoGEdge);
     }
 }

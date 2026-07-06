@@ -4,6 +4,7 @@ use gsm_sip_bridge::control::client;
 use gsm_sip_bridge::control::protocol::{ControlCmd, ControlResp};
 use gsm_sip_bridge::control::server::start_control_server;
 use gsm_sip_bridge::metrics;
+use gsm_sip_bridge::metrics::web_state::SharedSlots;
 use gsm_sip_bridge::modules::{CardPool, ControlCmdSender};
 use gsm_sip_bridge::observability::{logging, modemmanager};
 use gsm_sip_bridge::runtime;
@@ -60,10 +61,13 @@ fn main() -> ExitCode {
     let (control_tx, control_rx): (ControlCmdSender, _) = mpsc::channel(8);
     let socket_path = config.control.socket_path.clone();
 
+    let web_slots: SharedSlots = std::sync::Arc::new(std::sync::RwLock::new(Vec::new()));
+
     rt.block_on(async {
         let metrics_port = config.metrics.port;
+        let ws = web_slots.clone();
         let metrics_handle = tokio::spawn(async move {
-            if let Err(e) = metrics::server::serve(metrics_port).await {
+            if let Err(e) = metrics::server::serve(metrics_port, ws).await {
                 tracing::error!(error = %e, "metrics server failed");
             }
         });
@@ -95,7 +99,7 @@ fn main() -> ExitCode {
 
         let sip_bridge = SipBridge::new(&config);
         let sms_handler = SmsHandler::new(&config.sms, store.sender());
-        let card_pool = CardPool::new(config, store, sip_bridge, sms_handler);
+        let card_pool = CardPool::new(config, store, sip_bridge, sms_handler, web_slots);
 
         let pool_handle = tokio::spawn(async move {
             card_pool.run(single_card, shutdown_rx, control_rx).await;

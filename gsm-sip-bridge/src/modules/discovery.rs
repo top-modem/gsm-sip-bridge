@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 const EC20_VENDOR_ID: &str = "2c7c";
 const EC20_PRODUCT_ID: &str = "0125";
-const AT_INTERFACE_NUMBER: &str = "04";
+const AT_INTERFACE_NUMBER: &str = "02";
 
 #[derive(Debug, Clone)]
 pub struct DiscoveredModule {

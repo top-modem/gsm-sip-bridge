@@ -1,4 +1,5 @@
 pub mod server;
+pub mod web_state;
 
 use once_cell::sync::Lazy;
 use prometheus::{

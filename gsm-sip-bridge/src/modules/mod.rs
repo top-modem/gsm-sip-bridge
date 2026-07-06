@@ -8,6 +8,7 @@ pub mod scheduler;
 use crate::config::AppConfig;
 use crate::control::protocol::{ControlCmd, ControlResp, SlotInfo};
 use crate::metrics;
+use crate::metrics::web_state::{SharedSlots, WebSlotInfo};
 use crate::modules::at_commander::{AtCommander, AtResponse, NetworkMode, NetworkType};
 use crate::modules::card::{CardInstance, CardState};
 use crate::modules::discovery::{scan_modules, DiscoveredModule};
@@ -104,6 +105,28 @@ impl SlotState {
     }
 }
 
+fn sync_web_slots(slots: &HashMap<u32, SlotState>, shared: &SharedSlots) {
+    let mut web_infos: Vec<WebSlotInfo> = slots
+        .values()
+        .map(|s| WebSlotInfo {
+            slot: s.slot,
+            state: s.lifecycle.to_string(),
+            imei: s.imei.clone(),
+            phone: if s.phone_number.is_empty() {
+                "Unknown".to_string()
+            } else {
+                s.phone_number.clone()
+            },
+            network: s.network_type.to_string(),
+            active_call: s.has_active_call,
+        })
+        .collect();
+    web_infos.sort_by_key(|i| i.slot);
+    if let Ok(mut guard) = shared.write() {
+        *guard = web_infos;
+    }
+}
+
 pub fn backoff_delay(attempt: u32, initial_sec: u64, max_sec: u64) -> Duration {
     let shift = attempt.min(30);
     let secs = initial_sec.saturating_mul(1u64 << shift);
@@ -112,6 +135,7 @@ pub fn backoff_delay(attempt: u32, initial_sec: u64, max_sec: u64) -> Duration {
 
 pub struct CardPool {
     config: AppConfig,
+    web_slots: SharedSlots,
     store: StoreHandle,
     sip_bridge: SipBridge,
     sms_handler: SmsHandler,
@@ -167,6 +191,7 @@ impl CardPool {
         store: StoreHandle,
         sip_bridge: SipBridge,
         sms_handler: SmsHandler,
+        web_slots: SharedSlots,
     ) -> Self {
         let discord_client = if sms_handler.has_webhook() {
             let url = config.sms.discord_webhook_url.clone();
@@ -210,6 +235,7 @@ impl CardPool {
 
         Self {
             config,
+            web_slots,
             store,
             sip_bridge,
             sms_handler,
@@ -409,6 +435,7 @@ impl CardPool {
                 .filter(|s| s.lifecycle != LifecycleState::Ready)
                 .count() as f64,
         );
+        sync_web_slots(&slots, &self.web_slots);
 
         tracing::info!(
             active = slots
@@ -450,6 +477,7 @@ impl CardPool {
                 }
                 Some(event) = event_rx.recv() => {
                     self.handle_bridge_event(event, &mut slots);
+                    sync_web_slots(&slots, &self.web_slots);
                 }
                 Some(result) = tasks.join_next() => {
                     match result {
@@ -466,6 +494,7 @@ impl CardPool {
                                 state.next_retry_at = Some(tokio::time::Instant::now() + delay);
                                 metrics::MODULES_ACTIVE.set(slots.values().filter(|s| s.lifecycle == LifecycleState::Ready).count() as f64);
                                 metrics::MODULES_FAILED.set(slots.values().filter(|s| s.lifecycle != LifecycleState::Ready).count() as f64);
+                                sync_web_slots(&slots, &self.web_slots);
                             }
                         }
                         Err(e) => {
@@ -475,6 +504,7 @@ impl CardPool {
                 }
                 Some((cmd, reply)) = control_rx.recv() => {
                     self.handle_control_cmd(cmd, reply, &mut slots, &resilience);
+                    sync_web_slots(&slots, &self.web_slots);
                 }
                 _ = tokio::time::sleep_until(earliest_wakeup) => {
                     let now = tokio::time::Instant::now();
@@ -574,6 +604,7 @@ impl CardPool {
 
                     metrics::MODULES_ACTIVE.set(slots.values().filter(|s| s.lifecycle == LifecycleState::Ready).count() as f64);
                     metrics::MODULES_FAILED.set(slots.values().filter(|s| s.lifecycle != LifecycleState::Ready).count() as f64);
+                    sync_web_slots(&slots, &self.web_slots);
                 }
             }
         }
