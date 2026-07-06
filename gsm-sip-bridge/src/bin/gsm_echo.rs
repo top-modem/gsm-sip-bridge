@@ -140,6 +140,17 @@ fn route_audio_to_usb(at: &mut AtCommander) {
             }
         }
     }
+    match at.send_command("AT+QIPCMIP=1") {
+        Ok(AtResponse::Ok(_)) => {
+            tracing::info!("VoLTE PCM path enabled (AT+QIPCMIP=1)");
+        }
+        Ok(resp) => {
+            tracing::warn!(?resp, "AT+QIPCMIP=1 returned unexpected response");
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "AT+QIPCMIP=1 command failed");
+        }
+    }
 }
 
 fn run_event_loop(at: &mut AtCommander, audio_device: &str) -> ExitCode {

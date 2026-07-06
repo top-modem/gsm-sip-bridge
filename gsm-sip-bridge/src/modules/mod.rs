@@ -1369,6 +1369,7 @@ fn run_module_loop(
 
     at.send_command("ATE0").ok();
     at.send_command("AT+CLIP=1").ok();
+    at.send_command("AT+QINDCFG=\"ring\",0").ok();
     at.send_command("AT+CMGF=1").ok();
     at.send_command("AT+CNMI=2,1,0,0,0").ok();
     at.send_command("AT+CREG=1").ok();
@@ -1456,6 +1457,8 @@ fn run_module_loop(
 
         if trimmed == "RING" {
             handle_ring(&module, &mut at, &mut card, &event_tx, &mut call_ctx);
+        } else if trimmed.starts_with("+CLIP:") {
+            handle_clip(&module, &mut at, trimmed, &mut card, &event_tx, &mut call_ctx);
         } else if trimmed == "NO CARRIER" {
             handle_hangup(&module, &mut card, &event_tx, &store_tx, &mut call_ctx);
         } else if trimmed.starts_with("+CMTI:") {
@@ -1523,6 +1526,69 @@ fn handle_ring(
         .inc();
 
     let caller_id = extract_caller_id(at);
+
+    match at.answer_call() {
+        Ok(()) => {
+            card.state = CardState::Answering;
+            tracing::info!(
+                module = %module.id,
+                caller = %caller_id,
+                "call answered, requesting SIP bridge"
+            );
+
+            *call_ctx = Some(CallContext {
+                caller_id: caller_id.clone(),
+                sip_destination: String::new(),
+                started_at: Utc::now(),
+            });
+
+            let _ = event_tx.send(BridgeEvent::Ring {
+                module_id: module.id.clone(),
+                caller_id,
+                audio_device: module.audio_device.clone(),
+            });
+
+            card.state = CardState::Bridged;
+            metrics::ACTIVE_CALLS
+                .with_label_values(&[&module.id])
+                .set(1.0);
+            metrics::CALLS_TOTAL
+                .with_label_values(&[&module.id, "answered"])
+                .inc();
+        }
+        Err(e) => {
+            tracing::error!(module = %module.id, error = %e, "failed to answer call");
+            card.state = CardState::Idle;
+            metrics::CALLS_TOTAL
+                .with_label_values(&[&module.id, "missed"])
+                .inc();
+        }
+    }
+}
+
+fn handle_clip(
+    module: &DiscoveredModule,
+    at: &mut AtCommander,
+    line: &str,
+    card: &mut CardInstance,
+    event_tx: &mpsc::UnboundedSender<BridgeEvent>,
+    call_ctx: &mut Option<CallContext>,
+) {
+    if card.state != CardState::Idle {
+        return;
+    }
+
+    let caller_id = line
+        .strip_prefix("+CLIP:")
+        .and_then(|data| data.split(',').next())
+        .map(|n| n.trim().trim_matches('"').to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    tracing::info!(module = %module.id, caller = %caller_id, "incoming VoLTE call (+CLIP)");
+    card.state = CardState::Ringing;
+    metrics::CALLS_TOTAL
+        .with_label_values(&[&module.id, "incoming"])
+        .inc();
 
     match at.answer_call() {
         Ok(()) => {
@@ -1709,6 +1775,17 @@ fn route_audio_to_usb(at: &mut AtCommander, module_id: &str) {
                     );
                 }
             }
+        }
+    }
+    match at.send_command("AT+QIPCMIP=1") {
+        Ok(AtResponse::Ok(_)) => {
+            tracing::info!(module = %module_id, "VoLTE PCM path enabled (AT+QIPCMIP=1)");
+        }
+        Ok(resp) => {
+            tracing::warn!(module = %module_id, ?resp, "AT+QIPCMIP=1 returned unexpected response");
+        }
+        Err(e) => {
+            tracing::warn!(module = %module_id, error = %e, "AT+QIPCMIP=1 command failed");
         }
     }
 }

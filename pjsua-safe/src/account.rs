@@ -37,14 +37,11 @@ impl Account {
                 let mut acc_cfg: pjsua_sys::pjsua_acc_config = std::mem::zeroed();
                 pjsua_sys::pjsua_acc_config_default(&mut acc_cfg);
 
-                let id_str = format!(
-                    "\"{}\" <sip:{}@{}:{}>",
-                    config.display_name, config.username, config.sip_server, config.sip_port
-                );
+                let id_str = format!("sip:{}@{}", config.username, config.sip_server);
                 let id_cstr = CString::new(id_str).unwrap();
                 acc_cfg.id = pjsua_sys::pj_str(id_cstr.as_ptr() as *mut std::os::raw::c_char);
 
-                let reg_uri = format!("sip:{}:{}", config.sip_server, config.sip_port);
+                let reg_uri = format!("sip:{}@{}:{}", config.username, config.sip_server, config.sip_port);
                 let reg_cstr = CString::new(reg_uri).unwrap();
                 acc_cfg.reg_uri = pjsua_sys::pj_str(reg_cstr.as_ptr() as *mut std::os::raw::c_char);
 
