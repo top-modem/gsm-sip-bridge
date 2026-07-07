@@ -1,7 +1,10 @@
 pub mod alsa_media_port;
 
 use crate::config::{AppConfig, SipTransport, TlsVerify};
-use pjsua_safe::{Account, AccountConfig, Call, Endpoint, EndpointConfig, TransportType};
+use pjsua_safe::{
+    remove_call_port_map, set_call_port_map, Call, Endpoint, EndpointConfig, TransportType,
+};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegistrationState {
@@ -11,12 +14,20 @@ pub enum RegistrationState {
     Failed,
 }
 
+#[allow(dead_code)]
+struct ActiveCall {
+    call: Call,
+    gsm_caller_id: String,
+    dest_uri: String,
+    port_slot: i32,
+}
+
 pub struct SipBridge {
     pub state: RegistrationState,
     config: SipBridgeConfig,
     endpoint: Option<Endpoint>,
-    account: Option<Account>,
-    active_call: Option<Call>,
+    account: Option<pjsua_safe::Account>,
+    active_calls: HashMap<i32, ActiveCall>,
 }
 
 #[derive(Clone)]
@@ -70,7 +81,7 @@ impl SipBridge {
             config: sip_config,
             endpoint: None,
             account: None,
-            active_call: None,
+            active_calls: HashMap::new(),
         }
     }
 
@@ -104,7 +115,7 @@ impl SipBridge {
             format!("PJSIP endpoint creation failed: {e}")
         })?;
 
-        let acc_config = AccountConfig {
+        let acc_config = pjsua_safe::AccountConfig {
             sip_server: self.config.server.clone(),
             sip_port: self.config.port,
             username: self.config.username.clone(),
@@ -112,7 +123,7 @@ impl SipBridge {
             display_name: self.config.display_name.clone(),
         };
 
-        let account = Account::register(&endpoint, acc_config, None).map_err(|e| {
+        let account = pjsua_safe::Account::register(&endpoint, acc_config, None).map_err(|e| {
             self.state = RegistrationState::Failed;
             crate::metrics::SIP_REGISTRATIONS_TOTAL
                 .with_label_values(&["failure"])
@@ -148,49 +159,12 @@ impl SipBridge {
         format!("sip:{}@{}:{}", dest, self.config.server, self.config.port)
     }
 
-    pub fn set_sound_device(&self, alsa_device: &str) -> Result<(), String> {
-        let endpoint = self
-            .endpoint
-            .as_ref()
-            .ok_or_else(|| "PJSIP endpoint not initialized".to_string())?;
-
-        // Diagnostic: confirm the EC20 capture device can run natively at PJMEDIA's
-        // 8 kHz clock. If not, pjmedia silently resamples, which introduces the
-        // high-frequency imaging artefacts heard as "noise" on the GSM leg.
-        verify_native_rate(alsa_device, 8000);
-
-        let dev_index = endpoint
-            .find_audio_device(alsa_device)
-            .map_err(|e| format!("{e}"))?;
-
-        endpoint
-            .set_sound_device(dev_index, dev_index)
-            .map_err(|e| format!("{e}"))?;
-
-        tracing::info!(alsa = %alsa_device, pjsip_dev = dev_index, "sound device set");
-
-        // Promote PJMEDIA's sound-device thread to real-time so the ALSA capture buffer is
-        // serviced ahead of best-effort work (prevents XRUNs / choppy GSM audio). Opt-in
-        // via [audio] rt_audio_prio; best-effort, never fails the call path.
-        if self.config.rt_audio_prio > 0 {
-            // Prefix-match the PJMEDIA audio threads: the ALSA capture/playback I/O threads
-            // (`alsasound_captu`/`alsasound_playb`, 15-char-truncated comm) plus the
-            // `media`/`clock` timing threads. The capture thread is the one that matters
-            // most for preventing GSM-leg overruns.
-            let promoted = pjsua_safe::thread_prio::promote_threads_fifo(
-                self.config.rt_audio_prio as i32,
-                &["alsasound", "media", "clock"],
-            );
-            tracing::info!(
-                prio = self.config.rt_audio_prio,
-                promoted,
-                "applied real-time scheduling to audio thread(s)"
-            );
-        }
-        Ok(())
-    }
-
-    pub fn make_call(&mut self, dest_uri: &str, gsm_caller_id: &str) -> Result<(), String> {
+    pub fn make_call(
+        &mut self,
+        dest_uri: &str,
+        gsm_caller_id: &str,
+        #[allow(dead_code)] port_slot: i32,
+    ) -> Result<i32, String> {
         let account = self
             .account
             .as_ref()
@@ -205,27 +179,46 @@ impl SipBridge {
         }
 
         let call = Call::make(account, dest_uri, None, &headers).map_err(|e| format!("{e}"))?;
+        let call_id = call.call_id();
+
+        set_call_port_map(call_id, port_slot);
+
+        self.active_calls.insert(
+            call_id,
+            ActiveCall {
+                call,
+                gsm_caller_id: gsm_caller_id.to_string(),
+                dest_uri: dest_uri.to_string(),
+                port_slot,
+            },
+        );
+
         tracing::info!(
             dest = %dest_uri,
-            call_id = call.call_id(),
+            call_id,
+            port_slot,
             gsm_caller = %gsm_caller_id,
             "SIP outbound call initiated"
         );
-        self.active_call = Some(call);
-        Ok(())
+        Ok(call_id)
     }
 
-    pub fn hangup_active_call(&mut self) {
-        if let Some(ref mut call) = self.active_call {
-            if let Err(e) = call.hangup() {
-                tracing::warn!(error = %e, "failed to hangup SIP call");
+    pub fn hangup_call(&mut self, call_id: i32) {
+        if let Some(active) = self.active_calls.get_mut(&call_id) {
+            if let Err(e) = active.call.hangup() {
+                tracing::warn!(call_id, error = %e, "failed to hangup SIP call");
             }
+            self.active_calls.remove(&call_id);
+            remove_call_port_map(call_id);
+            tracing::info!(call_id, "SIP call hung up");
         }
-        self.active_call = None;
     }
 
     pub fn unregister(&mut self) {
-        self.hangup_active_call();
+        let call_ids: Vec<i32> = self.active_calls.keys().copied().collect();
+        for call_id in call_ids {
+            self.hangup_call(call_id);
+        }
         if let Some(ref mut account) = self.account {
             account.unregister();
         }
@@ -234,63 +227,5 @@ impl SipBridge {
         self.state = RegistrationState::Unregistered;
         crate::metrics::SIP_REGISTERED.set(0.0);
         tracing::info!("SIP unregistered");
-    }
-}
-
-/// Best-effort check that `device` supports `expected_rate` (Hz) natively for capture.
-///
-/// PJMEDIA runs the sound device at 8 kHz; if the EC20 USB-audio device only offers a
-/// different native rate, pjmedia resamples on the fly and the GSM-leg audio picks up
-/// high-frequency imaging artefacts. This logs a WARN so the mismatch is visible in the
-/// monitoring stack instead of being silently masked. Never fails the call path.
-fn verify_native_rate(device: &str, expected_rate: u32) {
-    use alsa::pcm::{HwParams, PCM};
-    use alsa::Direction;
-
-    let pcm = match PCM::new(device, Direction::Capture, false) {
-        Ok(p) => p,
-        Err(e) => {
-            // Device busy (already opened) or unusual name — non-fatal.
-            tracing::debug!(device, error = %e, "native-rate check: could not open capture device");
-            return;
-        }
-    };
-    let hwp = match HwParams::any(&pcm) {
-        Ok(h) => h,
-        Err(e) => {
-            tracing::debug!(device, error = %e, "native-rate check: HwParams::any failed");
-            return;
-        }
-    };
-    let min = hwp.get_rate_min().ok();
-    let max = hwp.get_rate_max().ok();
-    match (min, max) {
-        (Some(lo), Some(hi)) => {
-            let supported = expected_rate >= lo && expected_rate <= hi;
-            if supported {
-                tracing::info!(
-                    device,
-                    expected_rate,
-                    rate_min = lo,
-                    rate_max = hi,
-                    "capture device supports the PJMEDIA clock rate natively"
-                );
-            } else {
-                tracing::warn!(
-                    device,
-                    expected_rate,
-                    rate_min = lo,
-                    rate_max = hi,
-                    "capture device does NOT support the PJMEDIA clock rate natively; \
-                     pjmedia will resample and may introduce high-frequency artefacts on the GSM leg"
-                );
-            }
-        }
-        _ => {
-            tracing::debug!(
-                device,
-                "native-rate check: device did not report a rate range"
-            );
-        }
     }
 }

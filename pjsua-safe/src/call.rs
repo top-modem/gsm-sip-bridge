@@ -143,15 +143,12 @@ impl Call {
     pub fn conf_slot(&self) -> Option<SlotId> {
         #[cfg(feature = "pjsip-linked")]
         {
-            if self.state == CallState::Confirmed {
-                unsafe // SAFETY: call_id valid when Confirmed; writable stack pjsua_call_info for out-param
-                {
-                    let info = std::mem::zeroed::<pjsua_sys::pjsua_call_info>();
-                    let status =
-                        pjsua_sys::pjsua_call_get_info(self.call_id, &info as *const _ as *mut _);
-                    if status == crate::error::PJ_SUCCESS {
-                        return Some(info.conf_slot as SlotId);
-                    }
+            unsafe // SAFETY: call_id valid when Confirmed; writable stack pjsua_call_info for out-param
+            {
+                let mut info: pjsua_sys::pjsua_call_info = std::mem::zeroed();
+                let status = pjsua_sys::pjsua_call_get_info(self.call_id, &mut info);
+                if status == crate::error::PJ_SUCCESS && info.conf_slot >= 0 {
+                    return Some(info.conf_slot as SlotId);
                 }
             }
             return None;

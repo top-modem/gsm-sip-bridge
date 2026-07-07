@@ -17,6 +17,13 @@ static RINGBACK_ACTIVE: AtomicBool = AtomicBool::new(false);
 static AUDIO_MONITOR_RUNNING: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "pjsip-linked")]
 static AUDIO_CALL_SLOT: AtomicI32 = AtomicI32::new(-1);
+
+// The master conference bridge port, returned by pjsua_set_no_snd_dev().
+// Modules call tick_master_port() from their ALSA capture loop to drive
+// the conference bridge clock instead of a dedicated sound device thread.
+#[cfg(feature = "pjsip-linked")]
+static MASTER_CONF_PORT: std::sync::atomic::AtomicPtr<pjsua_sys::pjmedia_port> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 #[cfg(feature = "pjsip-linked")]
 static AUDIO_GSM_TO_SIP_SUM: AtomicU64 = AtomicU64::new(0);
 #[cfg(feature = "pjsip-linked")]
@@ -29,9 +36,39 @@ static AUDIO_SAMPLE_COUNT: AtomicU64 = AtomicU64::new(0);
 #[cfg(feature = "pjsip-linked")]
 static CONF_TX_LEVEL_MILLI: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1000);
 
+// Map of call_id → GSM media port conf_slot used by on_call_media_state_cb to
+// connect active calls to per-modem media ports instead of the global sound device.
+#[cfg(feature = "pjsip-linked")]
+static ACTIVE_CALL_PORT_MAP: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<i32, i32>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+pub fn set_call_port_map(call_id: i32, port_slot: i32) {
+    #[cfg(feature = "pjsip-linked")]
+    {
+        if let Ok(mut map) = ACTIVE_CALL_PORT_MAP.lock() {
+            map.insert(call_id, port_slot);
+        }
+    }
+    let _ = (call_id, port_slot);
+}
+
+pub fn remove_call_port_map(call_id: i32) {
+    #[cfg(feature = "pjsip-linked")]
+    {
+        if let Ok(mut map) = ACTIVE_CALL_PORT_MAP.lock() {
+            map.remove(&call_id);
+        }
+    }
+    let _ = call_id;
+}
+
 pub fn is_sip_peer_disconnected() -> bool {
     SIP_PEER_DISCONNECTED.swap(false, Ordering::AcqRel)
 }
+
+/// Signal that all modules are initialized and the system is ready for calls.
+pub fn signal_system_ready() {}
 
 #[derive(Debug, Clone)]
 pub struct EndpointConfig {
@@ -155,6 +192,12 @@ impl Endpoint {
                         "pjsua_start returned {status}"
                     )));
                 }
+
+                // The default PJSIP sound device (ALSA) remains active.
+                // Per-modem media ports registered by CardInstance are connected
+                // to active calls in on_call_media_state_cb instead of using
+                // the sound device slot. This avoids the segfaults caused by
+                // pjsua_set_no_snd_dev() or a dedicated clock thread.
             }
         }
 
@@ -180,6 +223,60 @@ impl Endpoint {
 
     pub fn ensure_thread_registered(&self) {
         ensure_pjsip_thread();
+    }
+
+    /// Tick the conference bridge master port to process audio frames.
+    /// Called by per-modem ALSA capture loops (every ~20 ms) instead of
+    /// relying on a PJSIP sound device thread. The caller MUST be a
+    /// PJSIP-registered thread (i.e., must have called ensure_pjsip_thread()
+    /// or Endpoint::ensure_thread_registered()).
+    /// Tick the conference bridge master port to process audio frames.
+    /// Called by the dedicated clock thread (started after all modules init).
+    pub fn tick_master_port() {
+        #[cfg(feature = "pjsip-linked")]
+        {
+            let port = MASTER_CONF_PORT.load(std::sync::atomic::Ordering::Acquire);
+            if port.is_null() {
+                return;
+            }
+            // Reuse a thread-local frame buffer to avoid per-tick allocation.
+            // Frame size: 8000 Hz × 20 ms = 160 samples × 2 bytes = 320 bytes.
+            thread_local! {
+                static FRAME_BUF: std::cell::UnsafeCell<[u8; 320]> = const { std::cell::UnsafeCell::new([0u8; 320]) };
+            }
+            FRAME_BUF.with(|cell| {
+                let buf = unsafe { &mut *cell.get() };
+                let mut frame = pjsua_sys::pjmedia_frame {
+                    type_: pjsua_sys::pjmedia_frame_type_PJMEDIA_FRAME_TYPE_AUDIO,
+                    buf: buf.as_mut_ptr() as *mut std::ffi::c_void,
+                    size: 320,
+                    timestamp: pjsua_sys::pj_timestamp { u64_: 0 },
+                    bit_info: 0,
+                };
+                unsafe {
+                    pjsua_sys::pjmedia_port_get_frame(port, &mut frame);
+                }
+            });
+        }
+        #[cfg(not(feature = "pjsip-linked"))]
+        {
+            // no-op in stub mode
+        }
+    }
+
+    /// Start a dedicated clock thread that ticks the conference bridge
+    /// every `ptime` milliseconds. Called once after all modules are
+    /// initialised, avoiding the race condition that caused crashes when
+    /// the clock thread was spawned inside `create()`.
+    #[cfg(feature = "pjsip-linked")]
+    pub fn start_clock_thread(ptime: u32) {
+        std::thread::spawn(move || {
+            ensure_pjsip_thread();
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(ptime as u64));
+                Self::tick_master_port();
+            }
+        });
     }
 
     pub fn conf_slot_count(&self) -> u32 {
@@ -362,21 +459,32 @@ unsafe extern "C" fn on_call_media_state_cb(call_id: pjsua_sys::pjsua_call_id) {
 
     if info.media_status == pjsua_sys::pjsua_call_media_status_PJSUA_CALL_MEDIA_ACTIVE {
         let call_slot = info.conf_slot as i32;
-        pjsua_sys::pjsua_conf_connect(call_slot, 0);
-        pjsua_sys::pjsua_conf_connect(0, call_slot);
 
-        // Apply configured GSM→SIP software gain on the sound-device slot (slot 0).
-        let tx_level = CONF_TX_LEVEL_MILLI.load(Ordering::Relaxed) as f32 / 1000.0;
-        if (tx_level - 1.0_f32).abs() > 0.001 {
-            pjsua_sys::pjsua_conf_adjust_tx_level(0, tx_level);
-            tracing::info!(call_id, tx_level, "GSM→SIP conference tx_level adjusted");
+        // Look up the per-modem GSM media port for this call and connect bidirectionally.
+        let port_slot = ACTIVE_CALL_PORT_MAP.lock().ok().and_then(|map| map.get(&call_id).copied());
+        if let Some(port_slot) = port_slot {
+            pjsua_sys::pjsua_conf_connect(call_slot, port_slot);
+            pjsua_sys::pjsua_conf_connect(port_slot, call_slot);
+            tracing::info!(
+                call_id,
+                call_slot,
+                port_slot,
+                "call media active, connected to GSM media port"
+            );
+        } else {
+            tracing::warn!(
+                call_id,
+                call_slot,
+                "no GSM media port mapping found for call"
+            );
         }
 
-        tracing::info!(
-            call_id,
-            call_slot,
-            "call media active, audio connected to sound device"
-        );
+        // Apply configured GSM→SIP software gain on the call's conf slot.
+        let tx_level = CONF_TX_LEVEL_MILLI.load(Ordering::Relaxed) as f32 / 1000.0;
+        if (tx_level - 1.0_f32).abs() > 0.001 {
+            pjsua_sys::pjsua_conf_adjust_tx_level(call_slot, tx_level);
+            tracing::info!(call_id, tx_level, "GSM→SIP conference tx_level adjusted");
+        }
 
         // Reset accumulators and start per-second signal-level sampler
         AUDIO_GSM_TO_SIP_SUM.store(0, Ordering::Relaxed);
@@ -385,17 +493,18 @@ unsafe extern "C" fn on_call_media_state_cb(call_id: pjsua_sys::pjsua_call_id) {
         AUDIO_CALL_SLOT.store(call_slot, Ordering::Relaxed);
         AUDIO_MONITOR_RUNNING.store(true, Ordering::Release);
 
-        std::thread::spawn(|| {
+        std::thread::spawn(move || {
             ensure_pjsip_thread();
             while AUDIO_MONITOR_RUNNING.load(Ordering::Acquire) {
                 std::thread::sleep(std::time::Duration::from_secs(1));
                 if !AUDIO_MONITOR_RUNNING.load(Ordering::Acquire) {
                     break;
                 }
-                let mut tx: u32 = 0; // GSM→SIP (ALSA capture → bridge)
-                let mut rx: u32 = 0; // SIP→GSM (bridge → ALSA playback)
-                // SAFETY: pjsua is running; slot 0 is always the sound device
-                if pjsua_sys::pjsua_conf_get_signal_level(0, &mut tx, &mut rx)
+                let mut tx: u32 = 0; // GSM→SIP (GSM media port → bridge)
+                let mut rx: u32 = 0; // SIP→GSM (bridge → GSM media port)
+                // SAFETY: pjsua is running; slot 0 is no longer the sound device
+                // Monitor the call's conf slot instead.
+                if pjsua_sys::pjsua_conf_get_signal_level(call_slot, &mut tx, &mut rx)
                     == PJ_SUCCESS
                 {
                     AUDIO_GSM_TO_SIP_SUM.fetch_add(tx as u64, Ordering::Relaxed);

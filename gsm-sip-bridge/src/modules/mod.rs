@@ -25,18 +25,19 @@ use crate::store::{StoreCommand, StoreHandle};
 use chrono::Utc;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::JoinSet;
 
 pub enum BridgeEvent {
     Ring {
-        module_id: String,
+        slot: u32,
         caller_id: String,
         audio_device: String,
     },
     Hangup {
-        module_id: String,
+        slot: u32,
     },
     SmsReceived {
         module_id: String,
@@ -88,6 +89,8 @@ struct SlotState {
     next_retry_at: Option<tokio::time::Instant>,
     cmd_tx: Option<crossbeam_channel::Sender<ModuleCmd>>,
     has_active_call: bool,
+    port_slot: Option<i32>,
+    call_id: Option<i32>,
 }
 
 impl SlotState {
@@ -331,6 +334,7 @@ impl CardPool {
         let mut tasks: JoinSet<(u32, String)> = JoinSet::new();
         let resilience = self.config.resilience.clone();
         let ring_capacity = self.config.audio.settings.ring_capacity;
+        let (port_reg_tx, mut port_reg_rx) = tokio::sync::mpsc::unbounded_channel::<(u32, i32)>();
 
         for module in modules {
             match self.try_init_module(&module) {
@@ -360,6 +364,8 @@ impl CardPool {
                         next_retry_at: None,
                         cmd_tx: Some(cmd_tx),
                         has_active_call: false,
+                        port_slot: None,
+                        call_id: None,
                     };
                     let store_tx = self.store.sender();
                     let sms_enabled = self.sms_handler.is_enabled();
@@ -369,9 +375,11 @@ impl CardPool {
                         rx_gain: self.config.audio.rx_gain,
                         eec_mode: self.config.audio.eec_mode,
                     };
+                    let port_reg_tx = port_reg_tx.clone();
                     tasks.spawn_blocking(move || {
                         let sid = slot;
                         if let Err(e) = run_module_loop(
+                            sid,
                             module_clone.clone(),
                             store_tx,
                             sms_enabled,
@@ -379,6 +387,7 @@ impl CardPool {
                             cmd_rx,
                             ring_capacity,
                             audio_init,
+                            port_reg_tx,
                         ) {
                             tracing::error!(module = %module_clone.id, error = %e, "module loop exited with error");
                         }
@@ -414,6 +423,8 @@ impl CardPool {
                             ),
                             cmd_tx: None,
                             has_active_call: false,
+                            port_slot: None,
+                            call_id: None,
                         },
                     );
                 }
@@ -449,6 +460,10 @@ impl CardPool {
             "card pool running"
         );
 
+        // All modules have had their chance to initialise — allow conference
+        // bridge ticks from ALSA capture threads.
+        pjsua_safe::endpoint::signal_system_ready();
+
         // USB rescan for hotplug reconnect (every 60 s — hot-plug is rare)
         let mut rescan_deadline = tokio::time::Instant::now() + Duration::from_secs(60);
 
@@ -478,6 +493,12 @@ impl CardPool {
                 Some(event) = event_rx.recv() => {
                     self.handle_bridge_event(event, &mut slots);
                     sync_web_slots(&slots, &self.web_slots);
+                }
+                Some((slot, pj_port_slot)) = port_reg_rx.recv() => {
+                    if let Some(state) = slots.get_mut(&slot) {
+                        state.port_slot = Some(pj_port_slot);
+                        tracing::info!(slot, pj_port_slot, "media port registered for slot");
+                    }
                 }
                 Some(result) = tasks.join_next() => {
                     match result {
@@ -541,8 +562,10 @@ impl CardPool {
                                     rx_gain: self.config.audio.rx_gain,
                                     eec_mode: self.config.audio.eec_mode,
                                 };
+                                let port_reg_tx = port_reg_tx.clone();
                                 tasks.spawn_blocking(move || {
                                     if let Err(e) = run_module_loop(
+                                        new_slot,
                                         module_clone.clone(),
                                         store_tx,
                                         sms_enabled,
@@ -550,6 +573,7 @@ impl CardPool {
                                         cmd_rx,
                                         ring_capacity,
                                         audio_init,
+                                        port_reg_tx,
                                     ) {
                                         tracing::error!(module = %module_clone.id, error = %e, "module loop exited");
                                     }
@@ -595,7 +619,7 @@ impl CardPool {
 
                     // USB rescan for new modules
                     if now >= rescan_deadline {
-                        self.rescan_new_modules(&mut slots, &mut tasks, &event_tx, ring_capacity);
+                        self.rescan_new_modules(&mut slots, &mut tasks, &event_tx, &port_reg_tx, ring_capacity);
                         rescan_deadline = tokio::time::Instant::now() + Duration::from_secs(60);
                     }
 
@@ -695,6 +719,7 @@ impl CardPool {
         slots: &mut HashMap<u32, SlotState>,
         tasks: &mut JoinSet<(u32, String)>,
         event_tx: &mpsc::UnboundedSender<BridgeEvent>,
+        port_reg_tx: &tokio::sync::mpsc::UnboundedSender<(u32, i32)>,
         ring_capacity: usize,
     ) {
         let known_serials: std::collections::HashSet<PathBuf> = slots
@@ -727,8 +752,10 @@ impl CardPool {
                         rx_gain: self.config.audio.rx_gain,
                         eec_mode: self.config.audio.eec_mode,
                     };
+                    let port_reg_tx = port_reg_tx.clone();
                     tasks.spawn_blocking(move || {
                         if let Err(e) = run_module_loop(
+                            slot,
                             module_clone.clone(),
                             store_tx,
                             sms_enabled,
@@ -736,6 +763,7 @@ impl CardPool {
                             cmd_rx,
                             ring_capacity,
                             audio_init,
+                            port_reg_tx,
                         ) {
                             tracing::error!(module = %module_clone.id, error = %e, "module loop exited");
                         }
@@ -755,6 +783,8 @@ impl CardPool {
                             next_retry_at: None,
                             cmd_tx: Some(cmd_tx),
                             has_active_call: false,
+                            port_slot: None,
+                            call_id: None,
                         },
                     );
                 }
@@ -782,6 +812,8 @@ impl CardPool {
                             ),
                             cmd_tx: None,
                             has_active_call: false,
+                            port_slot: None,
+                            call_id: None,
                         },
                     );
                 }
@@ -1236,59 +1268,70 @@ impl CardPool {
                 }
             }
             BridgeEvent::Ring {
-                module_id,
+                slot,
                 caller_id,
-                audio_device,
+                audio_device: _audio_device,
             } => {
-                if let Some(state) = slots.values_mut().find(|s| s.module.id == module_id) {
+                let port_slot = slots.get(&slot).and_then(|s| s.port_slot);
+
+                if let Some(state) = slots.get_mut(&slot) {
                     state.has_active_call = true;
                 }
                 if self.sip_bridge.state != crate::sip::RegistrationState::Registered {
                     tracing::warn!(
-                        module = %module_id,
+                        module = %slot,
                         "SIP not registered, cannot bridge call"
                     );
                     return;
                 }
 
+                let port_slot = match port_slot {
+                    Some(s) => s,
+                    None => {
+                        tracing::error!(
+                            module = %slot,
+                            "no media port registered for this slot"
+                        );
+                        return;
+                    }
+                };
+
                 let dest_uri = self.sip_bridge.compute_destination_uri(&caller_id);
                 tracing::info!(
-                    module = %module_id,
+                    slot,
                     caller = %caller_id,
                     dest = %dest_uri,
-                    audio = %audio_device,
-                    "bridging GSM call to SIP"
+                    port_slot,
+                    "bridging GSM call to SIP (on_call_media_state_cb will connect audio)"
                 );
 
-                if let Err(e) = self.sip_bridge.set_sound_device(&audio_device) {
-                    tracing::error!(error = %e, "failed to set sound device");
-                    metrics::AUDIO_ERRORS_TOTAL
-                        .with_label_values(&[&module_id, "sound_device"])
-                        .inc();
-                    return;
-                }
-
-                if let Err(e) = self.sip_bridge.make_call(&dest_uri, &caller_id) {
-                    tracing::error!(
-                        module = %module_id,
-                        error = %e,
-                        "SIP outbound call failed"
-                    );
-                    metrics::SIP_CALLS_TOTAL
-                        .with_label_values(&[&module_id, "error"])
-                        .inc();
-                } else {
-                    metrics::SIP_CALLS_TOTAL
-                        .with_label_values(&[&module_id, "initiated"])
-                        .inc();
+                match self.sip_bridge.make_call(&dest_uri, &caller_id, port_slot) {
+                    Ok(call_id) => {
+                        if let Some(state) = slots.get_mut(&slot) {
+                            state.call_id = Some(call_id);
+                        }
+                        metrics::SIP_CALLS_TOTAL
+                            .with_label_values(&[&slot.to_string(), "initiated"])
+                            .inc();
+                    }
+                    Err(e) => {
+                        tracing::error!(slot, error = %e, "failed to initiate SIP call");
+                        metrics::SIP_CALLS_TOTAL
+                            .with_label_values(&[&slot.to_string(), "error"])
+                            .inc();
+                    }
                 }
             }
-            BridgeEvent::Hangup { module_id } => {
-                if let Some(state) = slots.values_mut().find(|s| s.module.id == module_id) {
+            BridgeEvent::Hangup { slot } => {
+                let call_id = slots.get(&slot).and_then(|s| s.call_id);
+                if let Some(state) = slots.get_mut(&slot) {
                     state.has_active_call = false;
+                    state.call_id = None;
                 }
-                tracing::info!(module = %module_id, "GSM call ended, tearing down SIP call");
-                self.sip_bridge.hangup_active_call();
+                tracing::info!(slot, ?call_id, "GSM call ended, tearing down SIP call");
+                if let Some(call_id) = call_id {
+                    self.sip_bridge.hangup_call(call_id);
+                }
             }
             BridgeEvent::SmsReceived {
                 module_id,
@@ -1356,7 +1399,9 @@ struct ModuleAudioInit {
     eec_mode: Option<u32>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_module_loop(
+    slot: u32,
     module: DiscoveredModule,
     store_tx: crossbeam_channel::Sender<StoreCommand>,
     _sms_enabled: bool,
@@ -1364,10 +1409,12 @@ fn run_module_loop(
     cmd_rx: crossbeam_channel::Receiver<ModuleCmd>,
     ring_capacity: usize,
     audio_init: ModuleAudioInit,
+    port_reg_tx: tokio::sync::mpsc::UnboundedSender<(u32, i32)>,
 ) -> Result<(), String> {
     let mut at = AtCommander::open(&module.serial_port).map_err(|e| e.to_string())?;
 
     at.send_command("ATE0").ok();
+    at.send_command("AT+CHUP").ok();
     at.send_command("AT+CLIP=1").ok();
     at.send_command("AT+QINDCFG=\"ring\",0").ok();
     at.send_command("AT+CMGF=1").ok();
@@ -1392,6 +1439,31 @@ fn run_module_loop(
         module.audio_device.clone(),
         ring_capacity,
     );
+
+    if let Err(e) = Arc::get_mut(&mut card.pipeline)
+        .ok_or_else(|| "pipeline already shared".to_string())
+        .and_then(|p| p.start(&module.audio_device))
+    {
+        tracing::error!(module = %module.id, error = %e, "audio pipeline start failed");
+        metrics::AUDIO_ERRORS_TOTAL
+            .with_label_values(&[&module.id, "alsa_start"])
+            .inc();
+        return Err(e);
+    }
+
+    let _pjsip_port_slot = match card.register_media_port() {
+        Ok(ps) => {
+            let _ = port_reg_tx.send((slot, ps));
+            ps
+        }
+        Err(e) => {
+            tracing::error!(module = %module.id, error = %e, "media port registration failed");
+            metrics::AUDIO_ERRORS_TOTAL
+                .with_label_values(&[&module.id, "port_reg"])
+                .inc();
+            return Err(e);
+        }
+    };
 
     let mut call_ctx: Option<CallContext> = None;
 
@@ -1456,11 +1528,26 @@ fn run_module_loop(
         tracing::trace!(module = %module.id, urc = trimmed, "received");
 
         if trimmed == "RING" {
-            handle_ring(&module, &mut at, &mut card, &event_tx, &mut call_ctx);
+            handle_ring(slot, &module, &mut at, &mut card, &event_tx, &mut call_ctx);
         } else if trimmed.starts_with("+CLIP:") {
-            handle_clip(&module, &mut at, trimmed, &mut card, &event_tx, &mut call_ctx);
+            handle_clip(
+                slot,
+                &module,
+                &mut at,
+                trimmed,
+                &mut card,
+                &event_tx,
+                &mut call_ctx,
+            );
         } else if trimmed == "NO CARRIER" {
-            handle_hangup(&module, &mut card, &event_tx, &store_tx, &mut call_ctx);
+            handle_hangup(
+                slot,
+                &module,
+                &mut card,
+                &event_tx,
+                &store_tx,
+                &mut call_ctx,
+            );
         } else if trimmed.starts_with("+CMTI:") {
             handle_cmti(&module, &mut at, trimmed, &store_tx, &event_tx);
         } else if trimmed.starts_with("+CREG:") || trimmed.starts_with("+CEREG:") {
@@ -1509,6 +1596,7 @@ fn read_line_from_at(at: &mut AtCommander) -> Result<String, String> {
 }
 
 fn handle_ring(
+    slot: u32,
     module: &DiscoveredModule,
     at: &mut AtCommander,
     card: &mut CardInstance,
@@ -1543,7 +1631,7 @@ fn handle_ring(
             });
 
             let _ = event_tx.send(BridgeEvent::Ring {
-                module_id: module.id.clone(),
+                slot,
                 caller_id,
                 audio_device: module.audio_device.clone(),
             });
@@ -1567,6 +1655,7 @@ fn handle_ring(
 }
 
 fn handle_clip(
+    slot: u32,
     module: &DiscoveredModule,
     at: &mut AtCommander,
     line: &str,
@@ -1606,7 +1695,7 @@ fn handle_clip(
             });
 
             let _ = event_tx.send(BridgeEvent::Ring {
-                module_id: module.id.clone(),
+                slot,
                 caller_id,
                 audio_device: module.audio_device.clone(),
             });
@@ -1651,6 +1740,7 @@ fn extract_caller_id(at: &mut AtCommander) -> String {
 }
 
 fn handle_hangup(
+    slot: u32,
     module: &DiscoveredModule,
     card: &mut CardInstance,
     event_tx: &mpsc::UnboundedSender<BridgeEvent>,
@@ -1662,9 +1752,7 @@ fn handle_hangup(
         metrics::ACTIVE_CALLS
             .with_label_values(&[&module.id])
             .set(0.0);
-        let _ = event_tx.send(BridgeEvent::Hangup {
-            module_id: module.id.clone(),
-        });
+        let _ = event_tx.send(BridgeEvent::Hangup { slot });
         record_call_end(&module.id, store_tx, call_ctx, "answered");
     } else if card.state == CardState::Ringing {
         record_call_end(&module.id, store_tx, call_ctx, "missed");
@@ -1758,34 +1846,28 @@ fn handle_cmti(
 }
 
 fn route_audio_to_usb(at: &mut AtCommander, module_id: &str) {
-    match at.send_command("AT+QPCMV=1,2") {
+    match at.send_command("AT+QPCMV=1,0") {
         Ok(AtResponse::Ok(_)) => {
-            tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,2)");
+            tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,0)");
         }
-        _ => {
-            tracing::warn!(module = %module_id, "AT+QPCMV=1,2 failed, trying AT+QPCMV=1,0");
-            match at.send_command("AT+QPCMV=1,0") {
-                Ok(AtResponse::Ok(_)) => {
-                    tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,0)");
-                }
-                _ => {
-                    tracing::error!(
-                        module = %module_id,
-                        "failed to route voice audio to USB — audio will not work"
-                    );
-                }
+        _ => match at.send_command("AT+QPCMV=1,2") {
+            Ok(AtResponse::Ok(_)) => {
+                tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,2)");
             }
-        }
+            _ => {
+                tracing::error!(
+                    module = %module_id,
+                    "failed to route voice audio to USB — audio will not work"
+                );
+            }
+        },
     }
-    match at.send_command("AT+QIPCMIP=1") {
-        Ok(AtResponse::Ok(_)) => {
-            tracing::info!(module = %module_id, "VoLTE PCM path enabled (AT+QIPCMIP=1)");
-        }
-        Ok(resp) => {
-            tracing::warn!(module = %module_id, ?resp, "AT+QIPCMIP=1 returned unexpected response");
-        }
-        Err(e) => {
-            tracing::warn!(module = %module_id, error = %e, "AT+QIPCMIP=1 command failed");
+    // Disable voice-processing features that may distort USB audio:
+    // AGC, noise suppression, sidetone.
+    for cmd in ["AT+QDAI=4,0,0,4,0,0,1,1"] {
+        match at.send_command(cmd) {
+            Ok(AtResponse::Ok(_)) => tracing::info!(module = %module_id, cmd, "ok"),
+            _ => tracing::warn!(module = %module_id, cmd, "failed (may not be supported)"),
         }
     }
 }

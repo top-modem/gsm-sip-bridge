@@ -43,7 +43,7 @@ fn test_overrun_drops_oldest() {
 
 #[test]
 fn test_start_stop_lifecycle() {
-    let pipeline = AudioPipeline::new();
+    let mut pipeline = AudioPipeline::new();
     assert!(!pipeline.is_running());
 
     pipeline.start("null").unwrap();

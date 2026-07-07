@@ -140,15 +140,15 @@ fn route_audio_to_usb(at: &mut AtCommander) {
             }
         }
     }
-    match at.send_command("AT+QIPCMIP=1") {
+    match at.send_command("AT+QDAI=4,0,0,4,0,0,1,1") {
         Ok(AtResponse::Ok(_)) => {
-            tracing::info!("VoLTE PCM path enabled (AT+QIPCMIP=1)");
+            tracing::info!("VoLTE IMS audio routed to USB (AT+QDAI=4)");
         }
         Ok(resp) => {
-            tracing::warn!(?resp, "AT+QIPCMIP=1 returned unexpected response");
+            tracing::warn!(?resp, "AT+QDAI=4 returned unexpected response");
         }
         Err(e) => {
-            tracing::warn!(error = %e, "AT+QIPCMIP=1 command failed");
+            tracing::warn!(error = %e, "AT+QDAI=4 command failed");
         }
     }
 }
