@@ -18,9 +18,8 @@ static AUDIO_MONITOR_RUNNING: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "pjsip-linked")]
 static AUDIO_CALL_SLOT: AtomicI32 = AtomicI32::new(-1);
 
-// The master conference bridge port, returned by pjsua_set_no_snd_dev().
-// Modules call tick_master_port() from their ALSA capture loop to drive
-// the conference bridge clock instead of a dedicated sound device thread.
+// (Unused — PJSIP's sound device is set to snd-dummy via pjsua_set_snd_dev(),
+// which provides the conference-bridge clock without manual polling.)
 #[cfg(feature = "pjsip-linked")]
 static MASTER_CONF_PORT: std::sync::atomic::AtomicPtr<pjsua_sys::pjmedia_port> =
     std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
@@ -193,11 +192,63 @@ impl Endpoint {
                     )));
                 }
 
-                // The default PJSIP sound device (ALSA) remains active.
-                // Per-modem media ports registered by CardInstance are connected
-                // to active calls in on_call_media_state_cb instead of using
-                // the sound device slot. This avoids the segfaults caused by
-                // pjsua_set_no_snd_dev() or a dedicated clock thread.
+                // Find snd-dummy and switch PJSIP's sound device to it so it
+                // never tries to open any EC20 ALSA card (all held exclusively
+                // by the bridge's capture/playback threads). The dummy device
+                // provides the conference-bridge clock without touching real
+                // hardware.
+                let dummy_dev = {
+                    let count = pjsua_sys::pjmedia_aud_dev_count();
+                    let mut found: Option<i32> = None;
+                    for dev_id in 0..count {
+                        let mut dev_info: pjsua_sys::pjmedia_aud_dev_info =
+                            std::mem::zeroed();
+                        let st =
+                            pjsua_sys::pjmedia_aud_dev_get_info(dev_id as i32, &mut dev_info);
+                        if st == PJ_SUCCESS {
+                            let name = std::ffi::CStr::from_ptr(dev_info.name.as_ptr())
+                                .to_string_lossy()
+                                .to_string();
+                            tracing::debug!(
+                                target: "sip",
+                                dev_id,
+                                name = %name,
+                                input = dev_info.input_count,
+                                output = dev_info.output_count,
+                                "PJSIP audio device"
+                            );
+                            if name.contains("CARD=Dummy") && dev_info.input_count > 0
+                                && dev_info.output_count > 0
+                            {
+                                found = Some(dev_id as i32);
+                                break;
+                            }
+                        }
+                    }
+                    found
+                };
+
+                if let Some(dummy_id) = dummy_dev {
+                    let snd_status = pjsua_sys::pjsua_set_snd_dev(dummy_id, dummy_id);
+                    if snd_status != PJ_SUCCESS {
+                        tracing::warn!(
+                            target: "sip",
+                            dummy_id,
+                            "pjsua_set_snd_dev to snd-dummy failed"
+                        );
+                    } else {
+                        tracing::info!(
+                            target: "sip",
+                            dummy_id,
+                            "sound device switched to snd-dummy"
+                        );
+                    }
+                } else {
+                    tracing::warn!(
+                        target: "sip",
+                        "snd-dummy not found among PJSIP audio devices — calls may fail with PJMEDIA_EAUD_SYSERR"
+                    );
+                }
             }
         }
 

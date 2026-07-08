@@ -1,5 +1,6 @@
 use tracing::field::{Field, Visit};
 use tracing::span;
+use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
@@ -24,11 +25,37 @@ pub fn init(verbose: bool) {
             .unwrap_or_else(|_| EnvFilter::new("info,gsm_sip_bridge=info"))
     };
 
+    // Also write to gsm-bridge.log in the current directory
+    let log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("gsm-bridge.log")
+        .expect("failed to open gsm-bridge.log");
+    let file_layer = fmt::layer()
+        .with_target(true)
+        .with_writer(ArcFile(std::sync::Mutex::new(log_file)))
+        .with_ansi(false);
+
     tracing_subscriber::registry()
         .with(filter)
         .with(RedactionLayer)
         .with(fmt::layer().with_target(true))
+        .with(file_layer)
         .init();
+}
+
+/// Wraps a `Mutex<File>` so tracing-subscriber can write to it concurrently.
+struct ArcFile(std::sync::Mutex<std::fs::File>);
+
+impl<'writer> MakeWriter<'writer> for ArcFile {
+    type Writer = std::fs::File;
+    fn make_writer(&'writer self) -> Self::Writer {
+        self.0
+            .lock()
+            .unwrap()
+            .try_clone()
+            .expect("failed to clone log file fd")
+    }
 }
 
 struct RedactionLayer;
