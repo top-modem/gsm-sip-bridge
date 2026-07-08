@@ -568,14 +568,25 @@ unsafe extern "C" fn on_call_media_state_cb(call_id: pjsua_sys::pjsua_call_id) {
         // Look up the per-modem GSM media port for this call and connect bidirectionally.
         let port_slot = ACTIVE_CALL_PORT_MAP.lock().ok().and_then(|map| map.get(&call_id).copied());
         if let Some(port_slot) = port_slot {
-            pjsua_sys::pjsua_conf_connect(call_slot, port_slot);
-            pjsua_sys::pjsua_conf_connect(port_slot, call_slot);
-            tracing::info!(
-                call_id,
-                call_slot,
-                port_slot,
-                "call media active, connected to GSM media port"
-            );
+            let st1 = pjsua_sys::pjsua_conf_connect(call_slot, port_slot);
+            let st2 = pjsua_sys::pjsua_conf_connect(port_slot, call_slot);
+            if st1 != PJ_SUCCESS || st2 != PJ_SUCCESS {
+                tracing::error!(
+                    call_id,
+                    call_slot,
+                    port_slot,
+                    st1,
+                    st2,
+                    "pjsua_conf_connect failed"
+                );
+            } else {
+                tracing::info!(
+                    call_id,
+                    call_slot,
+                    port_slot,
+                    "call media active, connected to GSM media port"
+                );
+            }
         } else {
             tracing::warn!(
                 call_id,

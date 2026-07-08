@@ -1653,6 +1653,9 @@ fn handle_ring(
             // established. Re-send the routing commands after ATA to ensure
             // voice data flows over the USB audio interface.
             route_audio_to_usb(at, &module.id);
+            unmute_microphone(at, &module.id);
+            set_tx_gain(at, &module.id, 20000);
+            tracing::info!(module = %module.id, "USB audio routing and mic enabled after call answer");
 
             *call_ctx = Some(CallContext {
                 caller_id: caller_id.clone(),
@@ -1719,6 +1722,8 @@ fn handle_clip(
             );
 
             route_audio_to_usb(at, &module.id);
+            unmute_microphone(at, &module.id);
+            set_tx_gain(at, &module.id, 20000);
 
             *call_ctx = Some(CallContext {
                 caller_id: caller_id.clone(),
@@ -1878,15 +1883,15 @@ fn handle_cmti(
 }
 
 fn route_audio_to_usb(at: &mut AtCommander, module_id: &str) {
-    // Prefer 16-bit linear PCM mode (2) which matches our ALSA Format::s16.
-    // Fall back to default mode (0) if mode 2 is not supported.
-    match at.send_command("AT+QPCMV=1,2") {
+    // Prefer default QPCMV mode (0) first; fall back to 16-bit linear (2).
+    // Mode 0 is what the module answered OK to in the original working setup.
+    match at.send_command("AT+QPCMV=1,0") {
         Ok(AtResponse::Ok(_)) => {
-            tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,2)");
+            tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,0)");
         }
-        _ => match at.send_command("AT+QPCMV=1,0") {
+        _ => match at.send_command("AT+QPCMV=1,2") {
             Ok(AtResponse::Ok(_)) => {
-                tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,0)");
+                tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,2)");
             }
             _ => {
                 tracing::error!(
@@ -1896,7 +1901,9 @@ fn route_audio_to_usb(at: &mut AtCommander, module_id: &str) {
             }
         },
     }
-    for cmd in ["AT+QDAI=4,0,0,4,0,0,1,1"] {
+    // Disable voice-processing features that may distort USB audio:
+    // AGC, noise suppression, sidetone. Use rate=0 (8kHz) to match ALSA and GSM.
+    for cmd in ["AT+QDAI=4,0,0,0,0,0,1,1"] {
         match at.send_command(cmd) {
             Ok(AtResponse::Ok(_)) => tracing::info!(module = %module_id, cmd, "ok"),
             _ => tracing::warn!(module = %module_id, cmd, "failed (may not be supported)"),
@@ -1912,6 +1919,29 @@ fn set_rx_gain(at: &mut AtCommander, module_id: &str, gain: u32) {
         }
         _ => {
             tracing::warn!(module = %module_id, gain, "AT+QRXGAIN command failed; using modem default");
+        }
+    }
+}
+
+fn unmute_microphone(at: &mut AtCommander, module_id: &str) {
+    match at.send_command("AT+CMUT=0") {
+        Ok(AtResponse::Ok(_)) => {
+            tracing::info!(module = %module_id, "microphone unmuted (AT+CMUT=0)");
+        }
+        _ => {
+            tracing::warn!(module = %module_id, "AT+CMUT=0 failed; microphone may be muted");
+        }
+    }
+}
+
+fn set_tx_gain(at: &mut AtCommander, module_id: &str, gain: u32) {
+    let cmd = format!("AT+QTXGAIN={gain}");
+    match at.send_command(&cmd) {
+        Ok(AtResponse::Ok(_)) => {
+            tracing::info!(module = %module_id, gain, "EC20 transmit gain set (AT+QTXGAIN)");
+        }
+        _ => {
+            tracing::warn!(module = %module_id, gain, "AT+QTXGAIN command failed; using modem default");
         }
     }
 }
