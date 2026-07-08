@@ -2,6 +2,14 @@ use crate::call::SlotId;
 use crate::error::PjsipError;
 #[cfg(feature = "pjsip-linked")]
 use pjsua_sys::pj_status_t;
+#[cfg(feature = "pjsip-linked")]
+use std::sync::Mutex;
+
+/// Serializes concurrent calls to `pjsua_conf_add_port` from module init
+/// threads. PJSIP's conference bridge is not fully re-entrant when adding
+/// new ports while the sound device thread is active.
+#[cfg(feature = "pjsip-linked")]
+static CONF_BRIDGE_LOCK: Mutex<()> = Mutex::new(());
 
 pub trait AudioMediaPort: Send {
     fn read_frame(&mut self, buf: &mut [i16]);
@@ -34,11 +42,30 @@ impl MediaPortHandle {
 
                 let mut slot: pjsua_sys::pjsua_conf_port_id = -1;
 
-                let name = CString::new("gsm-media").unwrap();
+                // Hold the serialization lock while setting up and adding the
+                // port, so PJSIP's conference bridge is not racing with another
+                // module's port registration from its own blocking thread.
+                //
+                // The mutex is a standard-library Mutex, so we hold it across
+                // the FFI call. We release it as soon as conf_add_port returns.
+                let _bridge_lock = CONF_BRIDGE_LOCK.lock().unwrap();
 
-                let mut media_port: pjsua_sys::pjmedia_port = std::mem::zeroed();
+                // Allocate the pjmedia_port from PJSIP's pool so it outlives
+                // this function. PJSIP's conf bridge stores a POINTER to the
+                // port (not a copy), so a stack allocation would dangle.
+                let media_port = &mut *(pjsua_sys::pj_pool_calloc(
+                    pool,
+                    1,
+                    std::mem::size_of::<pjsua_sys::pjmedia_port>() as pjsua_sys::pj_size_t,
+                ) as *mut pjsua_sys::pjmedia_port);
 
-                media_port.info.name.ptr = name.as_ptr() as *mut std::os::raw::c_char;
+                // Leak the CString so it lives for the entire program lifetime.
+                // PJSIP's pjsua_conf_add_port uses pj_strdup to deep-copy the
+                // name, but keeping the original alive avoids any potential
+                // stale-pointer issue.
+                let name = CString::new("gsm-media").unwrap().into_raw();
+
+                media_port.info.name.ptr = name as *mut std::os::raw::c_char;
                 media_port.info.name.slen = 9;
 
                 media_port.info.signature = 0xBEEF;
@@ -65,7 +92,8 @@ impl MediaPortHandle {
                 media_port.put_frame = Some(put_frame_callback);
                 media_port.on_destroy = Some(on_destroy_callback);
 
-                let status = pjsua_sys::pjsua_conf_add_port(pool, &mut media_port, &mut slot);
+                let status = pjsua_sys::pjsua_conf_add_port(pool, media_port, &mut slot);
+                // _bridge_lock dropped here — other modules can register now.
                 if status != crate::error::PJ_SUCCESS {
                     let _ = Box::from_raw(port_ptr);
                     return Err(PjsipError::MediaPort(format!(

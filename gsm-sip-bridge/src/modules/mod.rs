@@ -376,6 +376,12 @@ impl CardPool {
                         eec_mode: self.config.audio.eec_mode,
                     };
                     let port_reg_tx = port_reg_tx.clone();
+                    // Sequential init: wait for this module's pipeline + port
+                    // registration to finish before spawning the next. The
+                    // oneshot sender is consumed inside run_module_loop once
+                    // init is done (before the event loop). If init fails, the
+                    // sender is dropped and the receiver gets RecvError.
+                    let (init_done_tx, init_done_rx) = tokio::sync::oneshot::channel::<()>();
                     tasks.spawn_blocking(move || {
                         let sid = slot;
                         if let Err(e) = run_module_loop(
@@ -388,12 +394,18 @@ impl CardPool {
                             ring_capacity,
                             audio_init,
                             port_reg_tx,
+                            init_done_tx,
                         ) {
                             tracing::error!(module = %module_clone.id, error = %e, "module loop exited with error");
                         }
                         (sid, module_clone.id)
                     });
                     slots.insert(slot, state);
+                    // Block until the current module finishes its init phase
+                    // (pipeline + port registration). This serializes module
+                    // init to prevent segfaults from concurrent PJSIP port
+                    // registration and potential ALSA device contention.
+                    let _ = init_done_rx.await;
                 }
                 Err(e) => {
                     tracing::warn!(module = %module.id, error = %e, "module init failed, will retry");
@@ -563,6 +575,7 @@ impl CardPool {
                                     eec_mode: self.config.audio.eec_mode,
                                 };
                                 let port_reg_tx = port_reg_tx.clone();
+                                let (retry_init_tx, retry_init_rx) = tokio::sync::oneshot::channel::<()>();
                                 tasks.spawn_blocking(move || {
                                     if let Err(e) = run_module_loop(
                                         new_slot,
@@ -574,11 +587,16 @@ impl CardPool {
                                         ring_capacity,
                                         audio_init,
                                         port_reg_tx,
+                                        retry_init_tx,
                                     ) {
                                         tracing::error!(module = %module_clone.id, error = %e, "module loop exited");
                                     }
                                     (new_slot, module_clone.id)
                                 });
+                                // Wait for this module's init phase (pipeline + port registration)
+                                // to complete before retrying the next slot, preventing concurrent
+                                // PJSIP port registration and ALSA device access.
+                                let _ = retry_init_rx.await;
 
                                 if let Some(state) = slots.get_mut(&slot) {
                                     state.imei = imei;
@@ -753,6 +771,7 @@ impl CardPool {
                         eec_mode: self.config.audio.eec_mode,
                     };
                     let port_reg_tx = port_reg_tx.clone();
+                    let (new_init_tx, _) = tokio::sync::oneshot::channel::<()>();
                     tasks.spawn_blocking(move || {
                         if let Err(e) = run_module_loop(
                             slot,
@@ -764,6 +783,7 @@ impl CardPool {
                             ring_capacity,
                             audio_init,
                             port_reg_tx,
+                            new_init_tx,
                         ) {
                             tracing::error!(module = %module_clone.id, error = %e, "module loop exited");
                         }
@@ -1410,6 +1430,7 @@ fn run_module_loop(
     ring_capacity: usize,
     audio_init: ModuleAudioInit,
     port_reg_tx: tokio::sync::mpsc::UnboundedSender<(u32, i32)>,
+    init_done_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), String> {
     let mut at = AtCommander::open(&module.serial_port).map_err(|e| e.to_string())?;
 
@@ -1471,6 +1492,10 @@ fn run_module_loop(
     metrics::ACTIVE_CALLS
         .with_label_values(&[&module.id])
         .set(0.0);
+
+    // Signal that init (pipeline + port registration) is complete, allowing
+    // the next module to begin its init. Must be done before the event loop.
+    let _ = init_done_tx.send(());
 
     loop {
         // If cmd_tx side was dropped (slot restarted), try_recv will see a disconnect.

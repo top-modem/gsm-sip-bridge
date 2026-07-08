@@ -2,6 +2,8 @@ use crate::error::PjsipError;
 #[cfg(feature = "pjsip-linked")]
 use crate::error::PJ_SUCCESS;
 use crate::log_bridge;
+#[cfg(feature = "pjsip-linked")]
+use pjsua_sys::pj_status_t;
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(feature = "pjsip-linked")]
 use std::sync::atomic::{AtomicI32, AtomicU64};
@@ -110,7 +112,7 @@ impl Endpoint {
     pub fn create(config: EndpointConfig) -> Result<Self, PjsipError> {
         #[cfg(feature = "pjsip-linked")]
         {
-            unsafe // SAFETY: Single init path; zeroed configs passed to PJSIP default/init/start APIs until success or destroy
+            unsafe // SAFETY: Single init path; pjsua_start is wrapped in a thread-level timeout (15 s) to handle the edge case where PipeWire/ALSA default device blocks indefinitely.
             {
                 let status = pjsua_sys::pjsua_create();
                 if status != PJ_SUCCESS {
@@ -139,9 +141,6 @@ impl Endpoint {
                 media_cfg.ec_tail_len = 0;
                 media_cfg.quality = 10;
                 media_cfg.ptime = 20;
-                // Size the ALSA sound-device ring buffers. Defaults come from config
-                // (150 ms) — a bump over PJSUA's 100/140 ms to ride out scheduling
-                // jitter / XRUNs on the EC20 USB-audio capture path.
                 media_cfg.snd_rec_latency = config.snd_rec_latency_ms;
                 media_cfg.snd_play_latency = config.snd_play_latency_ms;
                 tracing::info!(
@@ -184,11 +183,58 @@ impl Endpoint {
                     )));
                 }
 
-                let status = pjsua_sys::pjsua_start();
-                if status != PJ_SUCCESS {
+                // Spawn pjsua_start in a thread with a 15-second timeout.
+                // pjsua_start opens the default ALSA/PipeWire device which can
+                // block indefinitely if PipeWire is in a bad state after a
+                // non-graceful shutdown. A timeout lets the bridge recover
+                // instead of hanging forever.
+                let (tx_start, rx_start) = std::sync::mpsc::channel::<pj_status_t>();
+                tracing::debug!(target: "sip", "spawning pjsua_start thread");
+                std::thread::spawn(move || {
+                    // Must register with pjlib before calling any PJSIP functions.
+                    const THREAD_NAME: &[u8] = b"pjsua-start\0";
+                    let mut desc: libc::c_long = 0;
+                    let mut thread: *mut pjsua_sys::pj_thread_t = std::ptr::null_mut();
+                    let reg_st = unsafe {
+                        pjsua_sys::pj_thread_register(
+                            THREAD_NAME.as_ptr() as *const libc::c_char,
+                            &mut desc,
+                            &mut thread,
+                        )
+                    };
+                    tracing::debug!(target: "sip", reg_st, "pj_thread_register done");
+                    let st = pjsua_sys::pjsua_start();
+                    tracing::debug!(target: "sip", st, "pjsua_start returned");
+                    let _ = tx_start.send(st);
+                });
+
+                tracing::debug!(target: "sip", "waiting for pjsua_start (15 s timeout)");
+                let start_status = match rx_start.recv_timeout(std::time::Duration::from_secs(15))
+                {
+                    Ok(st) => st,
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        pjsua_sys::pjsua_destroy();
+                        return Err(PjsipError::InitFailed(
+                            "pjsua_start timed out (>15 s) opening default audio \
+                             device. Check that PipeWire/ALSA default device is \
+                             functional (e.g. `speaker-test` or `aplay`) and that \
+                             snd-dummy is loaded."
+                                .to_string(),
+                        ));
+                    }
+                    Err(e) => {
+                        pjsua_sys::pjsua_destroy();
+                        return Err(PjsipError::InitFailed(format!(
+                            "pjsua_start channel error: {e}"
+                        )));
+                    }
+                };
+                tracing::debug!(target: "sip", start_status, "pjsua_start result received");
+
+                if start_status != PJ_SUCCESS {
                     pjsua_sys::pjsua_destroy();
                     return Err(PjsipError::InitFailed(format!(
-                        "pjsua_start returned {status}"
+                        "pjsua_start returned {start_status}"
                     )));
                 }
 
@@ -220,8 +266,16 @@ impl Endpoint {
                             if name.contains("CARD=Dummy") && dev_info.input_count > 0
                                 && dev_info.output_count > 0
                             {
-                                found = Some(dev_id as i32);
-                                break;
+                                // Prefer sysdefault:CARD=Dummy (ALSA PCM plugin
+                                // with format conversion) over raw hw:CARD=Dummy.
+                                if name.starts_with("sysdefault:CARD=Dummy") {
+                                    found = Some(dev_id as i32);
+                                    break;
+                                }
+                                // Keep looking for a better match.
+                                if found.is_none() {
+                                    found = Some(dev_id as i32);
+                                }
                             }
                         }
                     }
