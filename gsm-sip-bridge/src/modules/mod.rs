@@ -1649,6 +1649,11 @@ fn handle_ring(
                 "call answered, requesting SIP bridge"
             );
 
+            // EC20 modules may reset the USB audio path when a call is
+            // established. Re-send the routing commands after ATA to ensure
+            // voice data flows over the USB audio interface.
+            route_audio_to_usb(at, &module.id);
+
             *call_ctx = Some(CallContext {
                 caller_id: caller_id.clone(),
                 sip_destination: String::new(),
@@ -1712,6 +1717,8 @@ fn handle_clip(
                 caller = %caller_id,
                 "call answered, requesting SIP bridge"
             );
+
+            route_audio_to_usb(at, &module.id);
 
             *call_ctx = Some(CallContext {
                 caller_id: caller_id.clone(),
@@ -1871,13 +1878,15 @@ fn handle_cmti(
 }
 
 fn route_audio_to_usb(at: &mut AtCommander, module_id: &str) {
-    match at.send_command("AT+QPCMV=1,0") {
+    // Prefer 16-bit linear PCM mode (2) which matches our ALSA Format::s16.
+    // Fall back to default mode (0) if mode 2 is not supported.
+    match at.send_command("AT+QPCMV=1,2") {
         Ok(AtResponse::Ok(_)) => {
-            tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,0)");
+            tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,2)");
         }
-        _ => match at.send_command("AT+QPCMV=1,2") {
+        _ => match at.send_command("AT+QPCMV=1,0") {
             Ok(AtResponse::Ok(_)) => {
-                tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,2)");
+                tracing::info!(module = %module_id, "voice audio routed to USB (AT+QPCMV=1,0)");
             }
             _ => {
                 tracing::error!(
@@ -1887,8 +1896,6 @@ fn route_audio_to_usb(at: &mut AtCommander, module_id: &str) {
             }
         },
     }
-    // Disable voice-processing features that may distort USB audio:
-    // AGC, noise suppression, sidetone.
     for cmd in ["AT+QDAI=4,0,0,4,0,0,1,1"] {
         match at.send_command(cmd) {
             Ok(AtResponse::Ok(_)) => tracing::info!(module = %module_id, cmd, "ok"),
