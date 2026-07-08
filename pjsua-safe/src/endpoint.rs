@@ -183,6 +183,15 @@ impl Endpoint {
                     )));
                 }
 
+                // Prevent pjsua_start() from opening the default ALSA/PipeWire
+                // device. We only need the conference bridge clock from the
+                // sound device, and we will switch to snd-dummy immediately
+                // after pjsua_start() completes. This avoids the indefinite
+                // hang when PipeWire is in a bad state after an unclean
+                // shutdown.
+                pjsua_sys::pjsua_set_no_snd_dev();
+                tracing::debug!(target: "sip", "disabled default sound device before pjsua_start");
+
                 // Spawn pjsua_start in a thread with a 15-second timeout.
                 // pjsua_start opens the default ALSA/PipeWire device which can
                 // block indefinitely if PipeWire is in a bad state after a
